@@ -249,9 +249,10 @@ export class RenderPipeline {
     const depthTexture = new DepthTexture(w, h)
     depthTexture.type = UnsignedIntType // DEPTH_COMPONENT24
 
-    const target = new WebGLRenderTarget(w, h, {
-      samples: this._msaaSamples,
-    })
+    // Note: MSAA (samples > 0) and depthTexture are mutually exclusive in Three.js WebGL2.
+    // When EDL/SSAO need depth texture, we skip MSAA on the scene target.
+    // The point shader's Gaussian alpha falloff provides adequate edge quality.
+    const target = new WebGLRenderTarget(w, h)
     target.depthTexture = depthTexture
     return target
   }
