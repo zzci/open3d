@@ -4,8 +4,9 @@ import type { EditOp } from '@/features/viewer/data/las-loader'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
-import { applyOp, loadLAS, saveLAS } from '@/features/viewer/data/las-loader'
+import { applyOp, loadLAS } from '@/features/viewer/data/las-loader'
 import { useI18n } from '@/features/viewer/hooks/use-i18n'
+import { saveFilteredLAS } from '@/features/viewer/data/las-saver'
 
 export const Route = createFileRoute('/viewer')({
   component: ViewerPage,
@@ -350,14 +351,26 @@ function ViewerPage() {
     }
   }, [editCount, showToast])
 
-  // Save — exports current (edited) point cloud by reading original file and filtering
+  // Save — build a Set of surviving point positions, then filter original file
   const handleSave = useCallback(async () => {
     const file = fileRef.current
-    if (!file || !data || !opsRef.current.length) { showToast(t('noEdits'), 'info'); return }
+    const base = baseDataRef.current
+    if (!file || !data || !base || data.count === base.count) { showToast(t('noEdits'), 'info'); return }
     setLoading(true)
     setLoadText(`${t('saving')}...`)
     try {
-      const blob = await saveLAS(file, opsRef.current, (pct) => {
+      // Build a set of surviving point position hashes for O(1) lookup
+      const kept = new Set<string>()
+      const dp = data.positions
+      for (let i = 0; i < data.count; i++) {
+        // Use quantized position as key (avoids float precision issues)
+        kept.add(`${(dp[i * 3]! * 1000) | 0},${(dp[i * 3 + 1]! * 1000) | 0},${(dp[i * 3 + 2]! * 1000) | 0}`)
+      }
+
+      // Build ops that mark points not in `kept` for deletion
+      // We use a synthetic op where matrix=identity and rect covers everything,
+      // but override saveLAS to use our kept-set approach instead
+      const blob = await saveFilteredLAS(file, kept, (pct) => {
         setProgress(pct)
         setLoadText(`${t('saving')}... ${(pct * 100) | 0}%`)
       })
