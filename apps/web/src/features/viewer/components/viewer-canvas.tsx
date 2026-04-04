@@ -17,6 +17,14 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
+  const edlEnabled = useViewerStore(s => s.edlEnabled)
+  const edlStrength = useViewerStore(s => s.edlStrength)
+  const edlRadius = useViewerStore(s => s.edlRadius)
+  const edlExponent = useViewerStore(s => s.edlExponent)
+  const ssaoEnabled = useViewerStore(s => s.ssaoEnabled)
+  const ssaoRadius = useViewerStore(s => s.ssaoRadius)
+  const ssaoIntensity = useViewerStore(s => s.ssaoIntensity)
+  const ssaoSamples = useViewerStore(s => s.ssaoSamples)
 
   // Mount renderer
   useEffect(() => {
@@ -56,6 +64,32 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   useEffect(() => {
     rendererRef.current?.updateSelection(selectionMap)
   }, [selectionMap])
+
+  // Sync EDL parameters
+  useEffect(() => {
+    rendererRef.current?.setEdlEnabled(edlEnabled)
+  }, [edlEnabled])
+
+  useEffect(() => {
+    rendererRef.current?.updateEdlParams({
+      strength: edlStrength,
+      radius: edlRadius,
+      exponent: edlExponent,
+    })
+  }, [edlStrength, edlRadius, edlExponent])
+
+  // Sync SSAO parameters
+  useEffect(() => {
+    rendererRef.current?.setSsaoEnabled(ssaoEnabled)
+  }, [ssaoEnabled])
+
+  useEffect(() => {
+    rendererRef.current?.updateSsaoParams({
+      radius: ssaoRadius,
+      intensity: ssaoIntensity,
+      samples: ssaoSamples,
+    })
+  }, [ssaoRadius, ssaoIntensity, ssaoSamples])
 
   // Selection hook
   const { dragRect, onPointerDown, onPointerMove, onPointerUp } = useSelection(rendererRef.current)

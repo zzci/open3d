@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { ColorMode } from './renderer/color-modes'
 import { PaletteId } from './renderer/palettes/palette-registry'
 
+export type SsaoSampleCount = 8 | 16 | 32
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type IntensityNormMode = 'linear' | 'histogram'
 
@@ -33,6 +34,12 @@ export interface ViewerState {
   edlRadius: number // 1-5
   edlStrength: number // 0-1
   edlExponent: number // 0.5-5
+
+  // SSAO (Screen-Space Ambient Occlusion)
+  ssaoEnabled: boolean
+  ssaoRadius: number // 0.1-2.0 world units
+  ssaoIntensity: number // 0-1
+  ssaoSamples: 8 | 16 | 32
 
   // Loading
   isLoading: boolean
@@ -74,6 +81,10 @@ export interface ViewerActions {
   setEdlRadius: (radius: number) => void
   setEdlStrength: (strength: number) => void
   setEdlExponent: (exponent: number) => void
+  setSsaoEnabled: (enabled: boolean) => void
+  setSsaoRadius: (radius: number) => void
+  setSsaoIntensity: (intensity: number) => void
+  setSsaoSamples: (samples: 8 | 16 | 32) => void
   setLoading: (isLoading: boolean, phase?: string) => void
   setLoadingProgress: (progress: number) => void
   setDataset: (descriptor: DatasetDescriptor, file: File) => void
@@ -104,6 +115,10 @@ const initialState: ViewerState = {
   edlRadius: 2,
   edlStrength: 0.5,
   edlExponent: 1.0,
+  ssaoEnabled: false,
+  ssaoRadius: 0.5,
+  ssaoIntensity: 0.5,
+  ssaoSamples: 16,
   isLoading: false,
   loadingProgress: 0,
   loadingPhase: '',
@@ -143,6 +158,14 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   setEdlStrength: strength => set({ edlStrength: strength }),
 
   setEdlExponent: exponent => set({ edlExponent: exponent }),
+
+  setSsaoEnabled: enabled => set({ ssaoEnabled: enabled }),
+
+  setSsaoRadius: radius => set({ ssaoRadius: radius }),
+
+  setSsaoIntensity: intensity => set({ ssaoIntensity: intensity }),
+
+  setSsaoSamples: samples => set({ ssaoSamples: samples }),
 
   setQualityPreset: (preset) => {
     set({

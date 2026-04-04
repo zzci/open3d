@@ -1,5 +1,7 @@
 import type { TileData } from '../data/types'
 import type { IntensityNormMode } from '../store'
+import type { EdlParams } from './post-processing/edl-pass'
+import type { SsaoParams } from './post-processing/ssao-pass'
 import type { PaletteId } from './palettes/palette-registry'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
@@ -9,6 +11,7 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorMode } from './color-modes'
+import { RenderPipeline } from './post-processing/render-pipeline'
 import { disposePalettes, getPaletteTexture } from './palettes/palette-registry'
 import { disposeSharedResources, TileMesh } from './tile-mesh'
 
@@ -71,6 +74,7 @@ export class PointCloudRenderer {
   readonly controls: OrbitControls
 
   private readonly webglRenderer: WebGLRenderer
+  private readonly pipeline: RenderPipeline
   private readonly tiles = new Map<string, TileMesh>()
   private readonly fpsTracker = new FpsTracker()
   private readonly resizeObserver: ResizeObserver
@@ -95,6 +99,11 @@ export class PointCloudRenderer {
       powerPreference: 'high-performance',
     })
     this.webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+    // Post-processing pipeline
+    const w = canvas.clientWidth || 1
+    const h = canvas.clientHeight || 1
+    this.pipeline = new RenderPipeline(w, h)
 
     // Scene
     this.scene = new Scene()
@@ -210,6 +219,26 @@ export class PointCloudRenderer {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Post-processing controls
+  // -----------------------------------------------------------------------
+
+  setEdlEnabled(enabled: boolean): void {
+    this.pipeline.edlEnabled = enabled
+  }
+
+  updateEdlParams(params: Partial<EdlParams>): void {
+    this.pipeline.updateEdlParams(params)
+  }
+
+  setSsaoEnabled(enabled: boolean): void {
+    this.pipeline.ssaoEnabled = enabled
+  }
+
+  updateSsaoParams(params: Partial<SsaoParams>): void {
+    this.pipeline.updateSsaoParams(params)
+  }
+
   /** Expose tiles map for coarse AABB filtering in selection pipeline */
   getTiles(): ReadonlyMap<string, TileMesh> {
     return this.tiles
@@ -246,6 +275,7 @@ export class PointCloudRenderer {
       this.tiles.delete(id)
     }
 
+    this.pipeline.dispose()
     disposeSharedResources()
     disposePalettes()
     this.webglRenderer.dispose()
@@ -265,7 +295,7 @@ export class PointCloudRenderer {
     this.lastFrameTime = now
 
     this.controls.update()
-    this.webglRenderer.render(this.scene, this.camera)
+    this.pipeline.render(this.webglRenderer, this.scene, this.camera)
   }
 
   private handleResize(): void {
@@ -276,6 +306,7 @@ export class PointCloudRenderer {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.webglRenderer.setSize(w, h, false)
+    this.pipeline.setSize(w, h)
 
     // Broadcast updated screen height to all tile shaders
     for (const tile of this.tiles.values()) {
