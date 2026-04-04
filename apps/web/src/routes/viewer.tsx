@@ -30,7 +30,7 @@ const COLOR_MODES = [
   { v: 'white', l: 'White' },
 ]
 
-type InteractionMode = 'navigate' | 'select'
+type InteractionMode = 'navigate' | 'select' | 'eraser'
 interface SelectionInfo { bitmap: Uint8Array, selectedCount: number, m: Float64Array, rect: [number, number, number, number] }
 
 /**
@@ -72,6 +72,9 @@ function ViewerPage() {
   const [selectedCount, setSelectedCount] = useState(0)
   const [totalPoints, setTotalPoints] = useState(0)
   const [editCount, setEditCount] = useState(0)
+  const [eraserSize, setEraserSize] = useState(20) // pixel radius
+  const [eraserPos, setEraserPos] = useState<{ x: number, y: number } | null>(null)
+  const erasingRef = useRef(false)
 
   const showToast = useCallback((msg: string, type = 'info') => {
     setToast({ msg, type })
@@ -268,6 +271,79 @@ function ViewerPage() {
     showToast('Undone', 'success')
   }, [deriveData, showToast])
 
+  // Eraser — removes points within radius of cursor position
+  const eraseAtPosition = useCallback((cx: number, cy: number) => {
+    const viewer = viewerRef.current
+    if (!data || !viewer) return
+    const pm = viewer.getPixelProjectionMatrix()
+    if (!pm) return
+
+    const r2 = eraserSize * eraserSize
+    const pos = data.positions, n = data.count
+    let removed = 0
+    const bitmap = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
+      if (p) {
+        const dx = p.sx - cx, dy = p.sy - cy
+        if (dx * dx + dy * dy <= r2) { bitmap[i] = 1; removed++ }
+      }
+    }
+    if (removed === 0) return
+
+    const nn = n - removed
+    const np = new Float32Array(nn * 3)
+    const nc = new Uint8Array(nn * 3)
+    const ni = new Uint8Array(nn)
+    let j = 0
+    for (let i = 0; i < n; i++) {
+      if (bitmap[i]) continue
+      np[j * 3] = data.positions[i * 3]!
+      np[j * 3 + 1] = data.positions[i * 3 + 1]!
+      np[j * 3 + 2] = data.positions[i * 3 + 2]!
+      nc[j * 3] = data.colors[i * 3]!
+      nc[j * 3 + 1] = data.colors[i * 3 + 1]!
+      nc[j * 3 + 2] = data.colors[i * 3 + 2]!
+      ni[j] = data.intensity[i]!
+      j++
+    }
+
+    const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
+
+    // Push as undo-able op (circular erase uses a dummy rect)
+    const vpSize = viewer.getViewportSize()
+    const op: EditOp = { matrix: Array.from(pm), rect: [cx - eraserSize, cy - eraserSize, cx + eraserSize, cy + eraserSize], vpWidth: vpSize.width, vpHeight: vpSize.height, keepInside: false }
+    opsRef.current.push(op)
+
+    setData(newData)
+    viewer.updateData(newData)
+    setEditCount(opsRef.current.length)
+  }, [data, eraserSize])
+
+  const onEraserDown = useCallback((e: React.MouseEvent) => {
+    if (mode !== 'eraser' || e.button !== 0) return
+    erasingRef.current = true
+    const r = containerRef.current!.getBoundingClientRect()
+    eraseAtPosition(e.clientX - r.left, e.clientY - r.top)
+  }, [mode, eraseAtPosition])
+
+  const onEraserMove = useCallback((e: React.MouseEvent) => {
+    if (mode !== 'eraser') return
+    const r = containerRef.current!.getBoundingClientRect()
+    const x = e.clientX - r.left, y = e.clientY - r.top
+    setEraserPos({ x, y })
+    if (erasingRef.current) {
+      eraseAtPosition(x, y)
+    }
+  }, [mode, eraseAtPosition])
+
+  const onEraserUp = useCallback(() => {
+    if (erasingRef.current) {
+      erasingRef.current = false
+      showToast(`Erased (${editCount + 1} edits)`, 'success')
+    }
+  }, [editCount, showToast])
+
   // Save
   const handleSave = useCallback(async () => {
     const file = fileRef.current
@@ -330,7 +406,8 @@ function ViewerPage() {
     const h = (e: KeyboardEvent) => {
       if (['INPUT', 'SELECT'].includes((e.target as HTMLElement).tagName)) return
       if (e.key === 's' && !e.ctrlKey && !e.metaKey) { setMode(m => m === 'select' ? 'navigate' : 'select'); e.preventDefault() }
-      if (e.key === 'Escape') clearSelection()
+      if (e.key === 'e' && !e.ctrlKey && !e.metaKey) { setMode(m => m === 'eraser' ? 'navigate' : 'eraser'); e.preventDefault() }
+      if (e.key === 'Escape') { clearSelection(); setMode('navigate') }
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { handleUndo(); e.preventDefault() }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave() }
       const vk: Record<string, string> = { 1: 'persp', 2: 'top', 3: 'bottom', 4: 'front', 5: 'right', 6: 'back', 7: 'left' }
@@ -359,7 +436,7 @@ function ViewerPage() {
       {/* deck.gl container */}
       <div ref={containerRef} className="absolute inset-0" />
 
-      {/* Selection interaction layer — sits above deck.gl canvas, blocks its controller */}
+      {/* Selection interaction layer */}
       {mode === 'select' && (
         <div
           className="absolute inset-0 z-10"
@@ -370,6 +447,30 @@ function ViewerPage() {
         />
       )}
       <div ref={rectRef} className="pointer-events-none absolute z-10 border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
+
+      {/* Eraser interaction layer */}
+      {mode === 'eraser' && (
+        <div
+          className="absolute inset-0 z-10"
+          style={{ cursor: 'none' }}
+          onMouseDown={onEraserDown}
+          onMouseMove={onEraserMove}
+          onMouseUp={onEraserUp}
+          onMouseLeave={() => { erasingRef.current = false; setEraserPos(null) }}
+        />
+      )}
+      {/* Eraser cursor circle */}
+      {mode === 'eraser' && eraserPos && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-full border-2 border-red-500"
+          style={{
+            left: eraserPos.x - eraserSize,
+            top: eraserPos.y - eraserSize,
+            width: eraserSize * 2,
+            height: eraserSize * 2,
+          }}
+        />
+      )}
 
       {/* Loading overlay */}
       {loading && (
@@ -405,9 +506,16 @@ function ViewerPage() {
 
             <div className="h-4 w-px bg-[#30363d]" />
 
-            {/* Nav/Select mode */}
+            {/* Nav/Select/Eraser mode */}
             <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-[#30363d]' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('navigate')}>Nav</button>
             <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-[#d63384] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('select')}>Sel</button>
+            <button className={`rounded px-2 py-0.5 ${mode === 'eraser' ? 'bg-[#f85149] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode(mode === 'eraser' ? 'navigate' : 'eraser')}>Eraser</button>
+            {mode === 'eraser' && (
+              <>
+                <input type="range" min="5" max="100" step="5" value={eraserSize} onChange={e => setEraserSize(Number(e.target.value))} className="w-14" />
+                <span className="tabular-nums text-[#8b949e]">{eraserSize}px</span>
+              </>
+            )}
 
             <div className="h-4 w-px bg-[#30363d]" />
 
