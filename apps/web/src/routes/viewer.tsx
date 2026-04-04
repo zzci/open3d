@@ -288,15 +288,19 @@ function ViewerPage() {
   return (
     <div className="relative h-screen w-screen bg-neutral-100">
       {/* deck.gl container */}
-      <div
-        ref={containerRef}
-        className="absolute inset-0"
-        style={{ cursor: mode === 'select' ? 'crosshair' : 'default' }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-      />
-      <div ref={rectRef} className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
+      <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Selection interaction layer — sits above deck.gl canvas, blocks its controller */}
+      {mode === 'select' && (
+        <div
+          className="absolute inset-0 z-10"
+          style={{ cursor: 'crosshair' }}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+        />
+      )}
+      <div ref={rectRef} className="pointer-events-none absolute z-10 border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
 
       {/* File opener overlay */}
       {!fileName && !loading && (
