@@ -324,19 +324,30 @@ export class DeckViewer {
     this.gridLines = lines
     this.axesLines = axes
 
-    const { xn, xx, yn, yx, zn, zx } = data.bounds
-    const bSize = Math.max(xx - xn, yx - yn, zx - zn) || 10
-
-    this.viewState = {
-      ...this.viewState,
-      target: [0, 0, 0],
-      rotationX: 30,
-      rotationOrbit: -30,
-      zoom: Math.log2((Math.min(this.container.clientWidth || 1400, this.container.clientHeight || 900) * 0.8) / bSize),
-    }
-    this.deck.setProps({ initialViewState: this.viewState as any })
     this.recomputeColors()
     this.updateLayers()
+
+    // Fit to viewport after deck.gl has rendered and container has real dimensions
+    const fitToView = () => {
+      const { xn, xx, yn, yx, zn, zx } = data.bounds
+      const bSize = Math.max(xx - xn, yx - yn, zx - zn) || 10
+      const vpW = this.container.clientWidth
+      const vpH = this.container.clientHeight
+      if (vpW === 0 || vpH === 0) {
+        // Container not ready yet, retry
+        requestAnimationFrame(fitToView)
+        return
+      }
+      this.viewState = {
+        ...this.viewState,
+        target: [0, 0, 0],
+        rotationX: 30,
+        rotationOrbit: -30,
+        zoom: Math.log2(Math.min(vpW, vpH) * 0.8 / bSize),
+      }
+      this.deck.setProps({ initialViewState: this.viewState as any })
+    }
+    requestAnimationFrame(fitToView)
   }
 
   /** Update point data without resetting camera — used after edit operations */
