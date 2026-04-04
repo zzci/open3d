@@ -313,6 +313,16 @@ export class DeckViewer {
       layers: [],
       style: { position: 'absolute', inset: '0' },
     })
+
+    // deck.gl creates internal overlay divs that may have opaque backgrounds
+    // Force all children of the container to be transparent
+    requestAnimationFrame(() => {
+      container.querySelectorAll('div').forEach((el) => {
+        if (el !== container && !el.querySelector('canvas')) {
+          el.style.background = 'transparent'
+        }
+      })
+    })
   }
 
   setData(data: PointCloudData): void {
