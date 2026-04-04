@@ -1,6 +1,7 @@
 import type { DatasetDescriptor } from './data/types'
 import { create } from 'zustand'
 import { ColorMode } from './renderer/color-modes'
+import { PaletteId } from './renderer/palettes/palette-registry'
 
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type IntensityNormMode = 'linear' | 'histogram'
@@ -25,6 +26,7 @@ export interface ViewerState {
 
   // Intensity normalization
   intensityNormMode: IntensityNormMode
+  paletteId: PaletteId
 
   // EDL (Eye-Dome Lighting)
   edlEnabled: boolean
@@ -64,6 +66,7 @@ export interface ViewerState {
 export interface ViewerActions {
   setColorMode: (mode: ColorMode) => void
   setIntensityNormMode: (mode: IntensityNormMode) => void
+  setPaletteId: (id: PaletteId) => void
   setSizeMultiplier: (multiplier: number) => void
   setPointBudget: (budget: number) => void
   setQualityPreset: (preset: QualityPreset) => void
@@ -93,6 +96,7 @@ const POINT_BUDGETS: Record<QualityPreset, number> = {
 const initialState: ViewerState = {
   colorMode: ColorMode.RGB,
   intensityNormMode: 'linear' as IntensityNormMode,
+  paletteId: PaletteId.Viridis,
   sizeMultiplier: 1.0,
   pointBudget: POINT_BUDGETS.medium,
   qualityPreset: 'medium',
@@ -126,6 +130,7 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   setColorMode: mode => set({ colorMode: mode }),
 
   setIntensityNormMode: mode => set({ intensityNormMode: mode }),
+  setPaletteId: id => set({ paletteId: id }),
 
   setSizeMultiplier: multiplier => set({ sizeMultiplier: multiplier }),
 

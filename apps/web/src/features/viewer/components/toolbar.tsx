@@ -1,4 +1,4 @@
-import type { IntensityNormMode, QualityPreset } from '../store'
+import type { QualityPreset } from '../store'
 import { Button } from '@/shared/components/ui/button'
 import {
   Select,
@@ -10,12 +10,8 @@ import {
 import { Slider } from '@/shared/components/ui/slider'
 import { formatMillions } from '../lib/format'
 import { COLOR_MODE_LABELS, ColorMode } from '../renderer/color-modes'
+import { PALETTE_LABELS, PaletteId } from '../renderer/palettes/palette-registry'
 import { useViewerStore } from '../store'
-
-const INTENSITY_NORM_OPTIONS: { value: IntensityNormMode, label: string }[] = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'histogram', label: 'Histogram EQ' },
-]
 
 interface ToolbarProps {
   onExport?: () => void
@@ -29,12 +25,9 @@ const COLOR_MODE_OPTIONS = [
   ColorMode.Height,
   ColorMode.Classification,
   ColorMode.White,
-  ColorMode.GrayscaleIntensity,
-  ColorMode.IntensityHeight,
-  ColorMode.ReturnNumber,
-  ColorMode.PaletteIntensity,
-  ColorMode.PaletteHeight,
 ] as const
+
+const PALETTE_OPTIONS = Object.values(PaletteId)
 
 const QUALITY_OPTIONS: QualityPreset[] = ['low', 'medium', 'high']
 
@@ -46,14 +39,14 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
 
 export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
-  const intensityNormMode = useViewerStore(s => s.intensityNormMode)
-  const setIntensityNormMode = useViewerStore(s => s.setIntensityNormMode)
+  const paletteId = useViewerStore(s => s.paletteId)
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const pointBudget = useViewerStore(s => s.pointBudget)
   const qualityPreset = useViewerStore(s => s.qualityPreset)
   const descriptor = useViewerStore(s => s.descriptor)
   const isExporting = useViewerStore(s => s.isExporting)
   const setColorMode = useViewerStore(s => s.setColorMode)
+  const setPaletteId = useViewerStore(s => s.setPaletteId)
   const setSizeMultiplier = useViewerStore(s => s.setSizeMultiplier)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
   const setQualityPreset = useViewerStore(s => s.setQualityPreset)
@@ -75,7 +68,7 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
           value={String(colorMode)}
           onValueChange={v => setColorMode(Number(v) as ColorMode)}
         >
-          <SelectTrigger className="h-7 w-[160px] text-xs">
+          <SelectTrigger className="h-7 w-[120px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -88,23 +81,26 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
         </Select>
       </div>
 
-      {/* Intensity normalization — shown only in Intensity color mode */}
-      {colorMode === ColorMode.Intensity && (
-        <>
-          <div className="flex items-center gap-1">
-            {INTENSITY_NORM_OPTIONS.map(opt => (
-              <Button
-                key={opt.value}
-                variant={intensityNormMode === opt.value ? 'default' : 'ghost'}
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => setIntensityNormMode(opt.value)}
-              >
-                {opt.label}
-              </Button>
-            ))}
-          </div>
-        </>
+      {/* Palette — visible for intensity/height modes */}
+      {(colorMode === ColorMode.Intensity || colorMode === ColorMode.Height) && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Palette</span>
+          <Select
+            value={paletteId}
+            onValueChange={v => setPaletteId(v as PaletteId)}
+          >
+            <SelectTrigger className="h-7 w-[100px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PALETTE_OPTIONS.map(id => (
+                <SelectItem key={id} value={id}>
+                  {PALETTE_LABELS[id]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
       <div className="h-4 w-px bg-border" />

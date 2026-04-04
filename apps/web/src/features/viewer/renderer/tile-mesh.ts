@@ -189,6 +189,11 @@ export class TileMesh {
     m.needsUpdate = true
   }
 
+  /** Swap the color palette texture used for palette-based color modes */
+  setPaletteTexture(texture: DataTexture): void {
+    this.material.uniforms.uColorPalette!.value = texture
+  }
+
   /** Swap the active intensity buffer between linear and equalized */
   setIntensityNormMode(mode: IntensityNormMode): void {
     const target = mode === 'histogram' ? this.intensityEqualized : this.intensityLinear
@@ -239,6 +244,7 @@ export class TileMesh {
         uHeightMax: { value: uniforms.heightMax },
         uSelectionActive: { value: uniforms.selectionActive ?? 0 },
         uClassificationPalette: { value: getClassificationPalette() },
+        uColorPalette: { value: getClassificationPalette() },
       },
       depthWrite: true,
       depthTest: true,
