@@ -37,9 +37,15 @@ function createFullscreenQuad(): BufferGeometry {
   const geo = new BufferGeometry()
   // Two triangles covering clip space [-1,1]
   const vertices = new Float32Array([
-    -1, -1, 0,
-    3, -1, 0, // oversized triangle trick
-    -1, 3, 0,
+    -1,
+    -1,
+    0,
+    3,
+    -1,
+    0, // oversized triangle trick
+    -1,
+    3,
+    0,
   ])
   geo.setAttribute('position', new BufferAttribute(vertices, 3))
   return geo

@@ -1,9 +1,10 @@
-import type { DatasetDescriptor } from '@/features/viewer/data/types'
+import type { DatasetDescriptor, IndexingProgress, IndexingResult, OctreeNode, TileData, WorkerResponse } from '@/features/viewer/data/types'
 import type { DeleteBySelectionOp, TileMask } from '@/features/viewer/editor/edit-log'
 import type { PointCloudRenderer } from '@/features/viewer/renderer/point-cloud-renderer'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef } from 'react'
 import { Matrix4 } from 'three'
+import { readTile } from '@/features/viewer/cache/opfs-cache'
 import { ExportDialog } from '@/features/viewer/components/export-dialog'
 import { FileOpener } from '@/features/viewer/components/file-opener'
 import { ProgressOverlay } from '@/features/viewer/components/progress-overlay'
@@ -12,6 +13,7 @@ import { StatusBar } from '@/features/viewer/components/status-bar'
 import { Toolbar } from '@/features/viewer/components/toolbar'
 import { ViewerCanvas } from '@/features/viewer/components/viewer-canvas'
 import { parseCopc } from '@/features/viewer/data/copc-reader'
+import { decodeTileBinary } from '@/features/viewer/data/octree-builder'
 import { ExportSession } from '@/features/viewer/editor/export-session'
 import { useEditSession } from '@/features/viewer/hooks/use-edit-session'
 import { useSelection } from '@/features/viewer/hooks/use-selection'
@@ -23,6 +25,53 @@ import { useViewerStore } from '@/features/viewer/store'
 export const Route = createFileRoute('/viewer')({
   component: ViewerPage,
 })
+
+// ---------------------------------------------------------------------------
+// Indexing Worker helper — runs LAS/LAZ → octree conversion
+// ---------------------------------------------------------------------------
+
+function runIndexingWorker(
+  file: File,
+  datasetId: string,
+  onProgress: (p: IndexingProgress) => void,
+): Promise<IndexingResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../features/viewer/workers/indexing.worker.ts', import.meta.url),
+      { type: 'module' },
+    )
+    const requestId = `index-${Date.now()}`
+
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      const msg = e.data
+      if (msg.requestId !== requestId)
+        return
+
+      if (msg.type === 'progress') {
+        onProgress(msg.payload as IndexingProgress)
+      }
+      else if (msg.type === 'result') {
+        worker.terminate()
+        resolve(msg.payload as IndexingResult)
+      }
+      else if (msg.type === 'error') {
+        worker.terminate()
+        reject(new Error((msg.payload as { message: string }).message))
+      }
+    }
+
+    worker.onerror = (err) => {
+      worker.terminate()
+      reject(new Error(err.message || 'Indexing worker failed'))
+    }
+
+    worker.postMessage({
+      requestId,
+      type: 'index',
+      payload: { file, datasetId } satisfies import('@/features/viewer/data/types').IndexingPayload,
+    })
+  })
+}
 
 function ViewerPage() {
   const rendererRef = useRef<PointCloudRenderer | null>(null)
@@ -194,43 +243,153 @@ function ViewerPage() {
     }, 500)
   }, [workerPool.decode, pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
 
+  const setupSchedulerWithDecode = useCallback((
+    hierarchy: Map<string, OctreeNode>,
+    desc: DatasetDescriptor,
+    sourceFile: File,
+    pointRecordLength: number,
+    decode: (payload: import('@/features/viewer/data/types').DecodeTilePayload) => Promise<TileData>,
+  ) => {
+    const renderer = rendererRef.current
+    if (!renderer)
+      return
+
+    const scheduler = new TileScheduler(
+      hierarchy,
+      decode,
+      {
+        onTileLoaded: (nodeId, data) => renderer.addTile(nodeId, data),
+        onTileEvicted: nodeId => renderer.removeTile(nodeId),
+      },
+      {
+        file: sourceFile,
+        pointFormat: desc.pointFormat,
+        pointRecordLength,
+        scale: desc.scale,
+        offset: desc.offset,
+      },
+      { pointBudget },
+    )
+    scheduler.setQuality(qualityPreset)
+    schedulerRef.current = scheduler
+
+    const { bounds } = desc
+    const cx = (bounds.min[0] + bounds.max[0]) / 2
+    const cy = (bounds.min[1] + bounds.max[1]) / 2
+    const cz = (bounds.min[2] + bounds.max[2]) / 2
+    const size = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2])
+
+    renderer.controls.target.set(cx, cy, cz)
+    renderer.camera.position.set(cx, cy + size * 0.5, cz + size)
+    renderer.camera.lookAt(cx, cy, cz)
+    renderer.controls.update()
+    renderer.updateHeightRange(bounds.min[1], bounds.max[1])
+
+    const view = buildViewState()
+    if (view)
+      scheduler.update(view)
+
+    const detector = createCameraIdleDetector(() => triggerSchedulerUpdate(), 150)
+    idleDetectorRef.current = detector
+    renderer.controls.addEventListener('change', detector.onCameraMove)
+
+    statsIntervalRef.current = setInterval(() => {
+      const s = schedulerRef.current
+      const r = rendererRef.current
+      if (s && r) {
+        updateStats({
+          loadedPointCount: s.loadedPointCount,
+          activeTileCount: s.activeTileCount,
+          fps: r.fps,
+        })
+      }
+    }, 500)
+  }, [pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
+
   const handleFileLoaded = useCallback(async (desc: DatasetDescriptor, sourceFile: File) => {
     const renderer = rendererRef.current
     if (!renderer)
       return
 
     cancelRef.current = false
-
-    if (desc.sourceFormat !== 'copc') {
-      // LAS/LAZ indexing not yet wired — reject early without writing to store
-      setLoading(true, 'LAS/LAZ files require indexing which is not yet available. Please use COPC format.')
-      setTimeout(setLoading, 3000, false)
-      return
-    }
-
     setDataset(desc, sourceFile)
 
     try {
-      setLoading(true, 'Reading header...')
-      const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
+      if (desc.sourceFormat === 'copc') {
+        // COPC path — parse hierarchy directly
+        setLoading(true, 'Reading header...')
+        const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
+          if (cancelRef.current)
+            return
+          setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
+          setLoadingProgress(percent)
+        })
         if (cancelRef.current)
           return
-        setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
-        setLoadingProgress(percent)
-      })
-      if (cancelRef.current)
-        return
-      setLoading(false)
-
-      const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
-      const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-      setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
-    }
-    catch {
-      if (!cancelRef.current)
         setLoading(false)
+
+        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
+        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
+        setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
+      }
+      else {
+        // LAS/LAZ path — index via Worker, then load from OPFS cache
+        setLoading(true, 'Indexing point cloud...')
+        const { hierarchy: hierArr, descriptor: indexedDesc } = await runIndexingWorker(
+          sourceFile,
+          desc.id,
+          (progress) => {
+            if (cancelRef.current)
+              return
+            setLoading(true, `${progress.phase} (${Math.round(progress.pointsProcessed / Math.max(progress.totalPoints, 1) * 100)}%)`)
+            setLoadingProgress(progress.pointsProcessed / Math.max(progress.totalPoints, 1) * 100)
+          },
+        )
+        if (cancelRef.current)
+          return
+        setLoading(false)
+
+        // Build hierarchy map
+        const hierarchy = new Map<string, OctreeNode>()
+        for (const node of hierArr) {
+          hierarchy.set(node.id, node)
+        }
+
+        // Create OPFS-based decode dispatcher
+        const datasetId = desc.id
+        const opfsDecode = async (payload: import('@/features/viewer/data/types').DecodeTilePayload): Promise<TileData> => {
+          const buf = await readTile(datasetId, payload.nodeId)
+          if (!buf)
+            throw new Error(`Tile ${payload.nodeId} not found in cache`)
+          const decoded = decodeTileBinary(buf)
+          return {
+            nodeId: payload.nodeId,
+            level: payload.level,
+            pointCount: decoded.pointCount,
+            bounds: payload.bounds,
+            spacing: payload.nodeId === '0-0-0-0' ? undefined : undefined,
+            positions: decoded.positions,
+            colors: decoded.colors,
+            intensity: decoded.intensity,
+            classification: decoded.classification,
+          }
+        }
+
+        // Use indexed descriptor if available
+        const finalDesc = indexedDesc ?? desc
+        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
+        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
+        setupSchedulerWithDecode(hierarchy, finalDesc, sourceFile, pointRecordLength, opfsDecode)
+      }
     }
-  }, [setDataset, setLoading, setLoadingProgress, setupScheduler])
+    catch (err) {
+      if (!cancelRef.current) {
+        setLoading(false)
+
+        console.error('File loading failed:', err)
+      }
+    }
+  }, [setDataset, setLoading, setLoadingProgress, setupScheduler, setupSchedulerWithDecode])
 
   // --- Selection actions: Delete / Keep ---
 
