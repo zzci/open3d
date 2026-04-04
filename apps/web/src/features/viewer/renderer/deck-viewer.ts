@@ -301,7 +301,7 @@ export class DeckViewer {
     this.deck = new Deck({
       parent: container as any,
       glOptions: { alpha: false },
-      views: new OrbitView({ orbitAxis: 'Z', near: 0.01, far: 10000 }),
+      views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
       parameters: { depthTest: true, clearColor: [0.5, 0.5, 0.52, 1] } as any, // dark bg like aaa/
