@@ -123,7 +123,7 @@ const initialState: ViewerState = {
   pointBudget: POINT_BUDGETS.medium,
   qualityPreset: 'medium',
   dpiScale: 'auto' as DpiScale,
-  edlEnabled: true,
+  edlEnabled: false,
   edlRadius: 2,
   edlStrength: 0.5,
   edlExponent: 1.0,

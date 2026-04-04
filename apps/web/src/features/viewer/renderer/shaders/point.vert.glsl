@@ -1,16 +1,13 @@
-precision highp float;
+// Note: position, modelViewMatrix, projectionMatrix are auto-injected by Three.js ShaderMaterial
 
-// Attributes
-attribute vec3 position;
+// Custom attributes
 attribute vec3 aColor;        // RGB 0–1
 attribute float aIntensity;   // 0–1
 attribute float aClassification;
 attribute float aReturnNumber; // 0–based return index
 attribute float aSelected;    // 1.0 = selected, 0.0 = not
 
-// Uniforms
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
+// Custom uniforms
 uniform float uNodeSpacing;    // meters — spatial extent per point at this LOD level
 uniform float uSizeMultiplier;     // user override (0.5–3.0, default 1.0)
 uniform float uRenderModeSizing;   // render mode sizing factor (0.5–1.5, default 1.0)

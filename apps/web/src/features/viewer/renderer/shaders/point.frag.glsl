@@ -1,4 +1,3 @@
-precision highp float;
 
 uniform int uColorMode;
 uniform int uPointShape; // 0 = hard circle (discard), 1 = gaussian splat
