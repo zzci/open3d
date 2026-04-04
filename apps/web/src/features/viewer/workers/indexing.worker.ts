@@ -1,11 +1,13 @@
 import type { LasHeader } from '../data/las-reader'
 import type { BuilderNode, TileAttributes } from '../data/octree-builder'
 import type {
+  Bounds,
   DatasetDescriptor,
   IndexingPayload,
   IndexingProgress,
   IndexingResult,
   OctreeNode,
+  TileData,
   WorkerRequest,
   WorkerResponse,
 } from '../data/types'
@@ -527,6 +529,88 @@ async function indexFile(
 }
 
 // ---------------------------------------------------------------------------
+// In-memory tile cache — retained after indexing for on-demand tile serving
+// ---------------------------------------------------------------------------
+
+interface TileCache {
+  root: BuilderNode
+  indices: Uint32Array
+  attrs: TileAttributes
+  nodeMap: Map<string, BuilderNode>
+}
+
+let tileCache: TileCache | null = null
+
+/** Build a flat lookup map from the tree for O(1) get-tile */
+function buildNodeMap(node: BuilderNode): Map<string, BuilderNode> {
+  const map = new Map<string, BuilderNode>()
+  function walk(n: BuilderNode) {
+    map.set(n.id, n)
+    for (const child of n.children) {
+      if (child)
+        walk(child)
+    }
+  }
+  walk(node)
+  return map
+}
+
+/** Encode a single tile on demand from cached data */
+function serveTile(
+  nodeId: string,
+  level: number,
+  bounds: Bounds,
+): TileData | null {
+  if (!tileCache)
+    return null
+  const node = tileCache.nodeMap.get(nodeId)
+  if (!node)
+    return null
+
+  const isLeaf = node.children.every(c => c === null)
+  const stride = isLeaf
+    ? 1
+    : Math.max(1, Math.floor((node.indexEnd - node.indexStart) / LOD_SAMPLES_PER_NODE))
+
+  const { indices, attrs } = tileCache
+  let pointCount = 0
+  for (let i = node.indexStart; i < node.indexEnd; i += stride)
+    pointCount++
+
+  const positions = new Float32Array(pointCount * 3)
+  const colors = attrs.colors ? new Uint8Array(pointCount * 3) : undefined
+  const intensity = new Float32Array(pointCount)
+  const classification = new Uint8Array(pointCount)
+
+  let out = 0
+  for (let i = node.indexStart; i < node.indexEnd; i += stride) {
+    const idx = indices[i]!
+    positions[out * 3] = attrs.positions[idx * 3]!
+    positions[out * 3 + 1] = attrs.positions[idx * 3 + 1]!
+    positions[out * 3 + 2] = attrs.positions[idx * 3 + 2]!
+    if (colors && attrs.colors) {
+      colors[out * 3] = attrs.colors[idx * 3]!
+      colors[out * 3 + 1] = attrs.colors[idx * 3 + 1]!
+      colors[out * 3 + 2] = attrs.colors[idx * 3 + 2]!
+    }
+    intensity[out] = attrs.intensity[idx]!
+    classification[out] = attrs.classification[idx]!
+    out++
+  }
+
+  return {
+    nodeId,
+    level,
+    pointCount,
+    bounds,
+    positions,
+    colors,
+    intensity,
+    classification,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Message handler
 // ---------------------------------------------------------------------------
 
@@ -536,6 +620,26 @@ globalThis.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (type === 'cancel') {
     cancelled = true
     respond({ requestId, type: 'result', payload: { cancelled: true } })
+    return
+  }
+
+  if (type === 'get-tile') {
+    // On-demand tile serving from in-memory cache
+    const { nodeId, level, bounds: tileBounds } = payload as { nodeId: string, level: number, bounds: Bounds }
+    const tile = serveTile(nodeId, level, tileBounds)
+    if (tile) {
+      const transfer: Transferable[] = [tile.positions.buffer]
+      if (tile.colors)
+        transfer.push(tile.colors.buffer)
+      if (tile.intensity)
+        transfer.push(tile.intensity.buffer)
+      if (tile.classification)
+        transfer.push(tile.classification.buffer)
+      respond({ requestId, type: 'result', payload: tile }, transfer)
+    }
+    else {
+      respond({ requestId, type: 'error', payload: { message: `Tile ${nodeId} not found` } })
+    }
     return
   }
 
@@ -552,7 +656,55 @@ globalThis.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
   try {
     const { file, datasetId } = payload as IndexingPayload
-    const result = await indexFile(file, datasetId, requestId)
+
+    // Always use in-memory path and skip OPFS writes — serve tiles on demand
+    sendProgress(requestId, {
+      pointsProcessed: 0,
+      totalPoints: 0,
+      phase: 'parsing',
+      estimatedRemaining: -1,
+    })
+
+    const header = await parseLasHeader(file)
+    const { crs } = await parseVlrs(file, header)
+    checkCancelled()
+
+    sendProgress(requestId, {
+      pointsProcessed: 0,
+      totalPoints: header.pointCount,
+      phase: 'reading',
+      estimatedRemaining: -1,
+    })
+
+    const points = await readAllPoints(file, header, requestId)
+    checkCancelled()
+
+    sendProgress(requestId, {
+      pointsProcessed: 0,
+      totalPoints: header.pointCount,
+      phase: 'building',
+      estimatedRemaining: -1,
+    })
+
+    const targetDepth = computeTargetDepth(header.pointCount)
+    const { root, indices } = buildOctree(
+      points.positions,
+      header.pointCount,
+      header.bounds,
+      targetDepth,
+    )
+    checkCancelled()
+
+    // Cache the tree in Worker memory for on-demand tile serving
+    tileCache = {
+      root,
+      indices,
+      attrs: points,
+      nodeMap: buildNodeMap(root),
+    }
+
+    const hierarchyNodes = buildHierarchyNodes(root)
+    const result = buildResult(file, header, hierarchyNodes, datasetId, crs)
 
     respond({
       requestId,

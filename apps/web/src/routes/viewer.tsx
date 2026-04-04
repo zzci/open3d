@@ -30,33 +30,81 @@ export const Route = createFileRoute('/viewer')({
 // Indexing Worker helper — runs LAS/LAZ → octree conversion
 // ---------------------------------------------------------------------------
 
-function runIndexingWorker(
+/**
+ * Indexing worker handle — stays alive after indexing to serve tile requests.
+ * The worker holds the octree + point data in memory and encodes tiles on demand.
+ */
+interface IndexingWorkerHandle {
+  result: IndexingResult
+  /** Request a tile from the worker. Worker encodes from in-memory data. */
+  getTile: (nodeId: string, level: number, bounds: import('@/features/viewer/data/types').Bounds) => Promise<TileData>
+  /** Terminate the worker and free memory. */
+  terminate: () => void
+}
+
+function createIndexingWorker(
   file: File,
   datasetId: string,
   onProgress: (p: IndexingProgress) => void,
-): Promise<IndexingResult> {
+): Promise<IndexingWorkerHandle> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(
       new URL('../features/viewer/workers/indexing.worker.ts', import.meta.url),
       { type: 'module' },
     )
-    const requestId = `index-${Date.now()}`
+    const indexRequestId = `index-${Date.now()}`
+    const pendingTiles = new Map<string, { resolve: (data: TileData) => void, reject: (err: Error) => void }>()
 
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data
-      if (msg.requestId !== requestId)
-        return
 
-      if (msg.type === 'progress') {
-        onProgress(msg.payload as IndexingProgress)
+      if (msg.requestId === indexRequestId) {
+        // Indexing phase messages
+        if (msg.type === 'progress') {
+          onProgress(msg.payload as IndexingProgress)
+        }
+        else if (msg.type === 'result') {
+          const result = msg.payload as IndexingResult
+          // Don't terminate — worker stays alive as tile server
+          resolve({
+            result,
+            getTile: (nodeId, level, bounds) => {
+              const tileReqId = `tile-${nodeId}-${Date.now()}`
+              return new Promise((res, rej) => {
+                pendingTiles.set(tileReqId, { resolve: res, reject: rej })
+                worker.postMessage({
+                  requestId: tileReqId,
+                  type: 'get-tile',
+                  payload: { nodeId, level, bounds },
+                })
+              })
+            },
+            terminate: () => {
+              worker.terminate()
+              for (const [, p] of pendingTiles) {
+                p.reject(new Error('Worker terminated'))
+              }
+              pendingTiles.clear()
+            },
+          })
+        }
+        else if (msg.type === 'error') {
+          worker.terminate()
+          reject(new Error((msg.payload as { message: string }).message))
+        }
       }
-      else if (msg.type === 'result') {
-        worker.terminate()
-        resolve(msg.payload as IndexingResult)
-      }
-      else if (msg.type === 'error') {
-        worker.terminate()
-        reject(new Error((msg.payload as { message: string }).message))
+      else {
+        // Tile request response
+        const pending = pendingTiles.get(msg.requestId)
+        if (pending) {
+          pendingTiles.delete(msg.requestId)
+          if (msg.type === 'result') {
+            pending.resolve(msg.payload as TileData)
+          }
+          else {
+            pending.reject(new Error((msg.payload as { message: string }).message ?? 'Tile decode failed'))
+          }
+        }
       }
     }
 
@@ -66,7 +114,7 @@ function runIndexingWorker(
     }
 
     worker.postMessage({
-      requestId,
+      requestId: indexRequestId,
       type: 'index',
       payload: { file, datasetId } satisfies import('@/features/viewer/data/types').IndexingPayload,
     })
@@ -79,6 +127,7 @@ function ViewerPage() {
   const idleDetectorRef = useRef<ReturnType<typeof createCameraIdleDetector> | null>(null)
   const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const exportSessionRef = useRef<ExportSession | null>(null)
+  const indexingWorkerRef = useRef<IndexingWorkerHandle | null>(null)
   const cancelRef = useRef(false)
 
   const descriptor = useViewerStore(s => s.descriptor)
@@ -106,6 +155,7 @@ function ViewerPage() {
       if (statsIntervalRef.current)
         clearInterval(statsIntervalRef.current)
       exportSessionRef.current?.cancel()
+      indexingWorkerRef.current?.terminate()
       reset()
     }
   }, [reset])
@@ -333,9 +383,9 @@ function ViewerPage() {
         setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
       }
       else {
-        // LAS/LAZ path — index via Worker, then load from OPFS cache
+        // LAS/LAZ path — index in Worker, then use Worker as live tile server
         setLoading(true, 'Indexing point cloud...')
-        const { hierarchy: hierArr, descriptor: indexedDesc } = await runIndexingWorker(
+        const handle = await createIndexingWorker(
           sourceFile,
           desc.id,
           (progress) => {
@@ -345,41 +395,30 @@ function ViewerPage() {
             setLoadingProgress(progress.pointsProcessed / Math.max(progress.totalPoints, 1) * 100)
           },
         )
-        if (cancelRef.current)
+        if (cancelRef.current) {
+          handle.terminate()
           return
+        }
         setLoading(false)
+
+        // Store handle ref for cleanup
+        indexingWorkerRef.current = handle
 
         // Build hierarchy map
         const hierarchy = new Map<string, OctreeNode>()
-        for (const node of hierArr) {
+        for (const node of handle.result.hierarchy) {
           hierarchy.set(node.id, node)
         }
 
-        // Create OPFS-based decode dispatcher
-        const datasetId = desc.id
-        const opfsDecode = async (payload: import('@/features/viewer/data/types').DecodeTilePayload): Promise<TileData> => {
-          const buf = await readTile(datasetId, payload.nodeId)
-          if (!buf)
-            throw new Error(`Tile ${payload.nodeId} not found in cache`)
-          const decoded = decodeTileBinary(buf)
-          return {
-            nodeId: payload.nodeId,
-            level: payload.level,
-            pointCount: decoded.pointCount,
-            bounds: payload.bounds,
-            spacing: payload.nodeId === '0-0-0-0' ? undefined : undefined,
-            positions: decoded.positions,
-            colors: decoded.colors,
-            intensity: decoded.intensity,
-            classification: decoded.classification,
-          }
+        // Decode dispatcher: asks the indexing worker for tiles on demand
+        const workerDecode = async (payload: import('@/features/viewer/data/types').DecodeTilePayload): Promise<TileData> => {
+          return handle.getTile(payload.nodeId, payload.level, payload.bounds)
         }
 
-        // Use indexed descriptor if available
-        const finalDesc = indexedDesc ?? desc
+        const finalDesc = handle.result.descriptor ?? desc
         const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
         const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-        setupSchedulerWithDecode(hierarchy, finalDesc, sourceFile, pointRecordLength, opfsDecode)
+        setupSchedulerWithDecode(hierarchy, finalDesc, sourceFile, pointRecordLength, workerDecode)
       }
     }
     catch (err) {
