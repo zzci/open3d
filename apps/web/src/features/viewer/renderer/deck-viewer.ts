@@ -272,7 +272,11 @@ export class DeckViewer {
   private deck: Deck<any>
   private data: PointCloudData | null = null
   private colorBuf: Uint8Array | null = null
+  private normalsBuf: Float32Array | null = null
   private highlightBuf: Uint8Array | null = null
+  private gridLines: GridLine[] = []
+  private axesLines: GridLine[] = []
+  private colorVersion = 0
   private viewState: DeckViewState
   private config: ViewerConfig
   private container: HTMLElement
@@ -313,7 +317,13 @@ export class DeckViewer {
   setData(data: PointCloudData): void {
     this.data = data
     this.colorBuf = new Uint8Array(data.count * 3)
+    this.normalsBuf = new Float32Array(data.count * 3) // cached, not re-allocated
     this.highlightBuf = null
+
+    // Cache grid (only rebuild when data changes)
+    const { lines, axes } = buildGrid(data.bounds)
+    this.gridLines = lines
+    this.axesLines = axes
 
     const { xn, xx, yn, yx, zn, zx } = data.bounds
     const bSize = Math.max(xx - xn, yx - yn, zx - zn) || 10
@@ -333,6 +343,7 @@ export class DeckViewer {
   setColorMode(mode: string): void {
     this.config.colorMode = mode
     this.recomputeColors()
+    this.colorVersion++
     this.updateLayers()
   }
 
@@ -368,6 +379,7 @@ export class DeckViewer {
   setHighlight(highlight: Uint8Array | null): void {
     this.highlightBuf = highlight
     this.recomputeColors()
+    this.colorVersion++
     this.updateLayers()
   }
 
@@ -409,19 +421,16 @@ export class DeckViewer {
   }
 
   private updateLayers(): void {
-    if (!this.data || !this.colorBuf) {
+    if (!this.data || !this.colorBuf || !this.normalsBuf) {
       this.deck.setProps({ layers: [] })
       return
     }
-
-    const { lines, axes } = buildGrid(this.data.bounds)
-    const normals = new Float32Array(this.data.count * 3) // flat normals (0,0,0) — no lighting
 
     this.deck.setProps({
       layers: [
         new LineLayer({
           id: 'grid',
-          data: lines,
+          data: this.gridLines,
           getSourcePosition: ((d: GridLine) => d.s) as any,
           getTargetPosition: ((d: GridLine) => d.t) as any,
           getColor: ((d: GridLine) => d.c) as any,
@@ -430,7 +439,7 @@ export class DeckViewer {
         }),
         new LineLayer({
           id: 'axes',
-          data: axes,
+          data: this.axesLines,
           getSourcePosition: ((d: GridLine) => d.s) as any,
           getTargetPosition: ((d: GridLine) => d.t) as any,
           getColor: ((d: GridLine) => d.c) as any,
@@ -444,12 +453,16 @@ export class DeckViewer {
             attributes: {
               getPosition: { value: this.data.positions, size: 3 },
               getColor: { value: this.colorBuf, size: 3 },
-              getNormal: { value: normals, size: 3 },
+              getNormal: { value: this.normalsBuf, size: 3 },
             },
           },
           pointSize: this.config.pointSizeMultiplier * 2,
           sizeUnits: 'common' as const,
           material: false,
+          // Tell deck.gl which attributes changed — avoids re-uploading positions
+          updateTriggers: {
+            getColor: this.colorVersion,
+          },
         }),
       ],
     })
