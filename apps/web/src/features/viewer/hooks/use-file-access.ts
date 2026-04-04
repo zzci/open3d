@@ -234,23 +234,24 @@ export function useFileAccess() {
     isLoading: false,
     error: null,
     descriptor: null,
+    file: null,
   })
   const inputRef = useRef<HTMLInputElement>(null)
 
   const processFile = useCallback(async (file: File) => {
     if (!validateFileExtension(file.name)) {
-      setState({ isLoading: false, error: `Unsupported file type: ${file.name}. Expected .las, .laz, or .copc.las`, descriptor: null })
+      setState({ isLoading: false, error: `Unsupported file type: ${file.name}. Expected .las, .laz, or .copc.las`, descriptor: null, file: null })
       return
     }
 
-    setState({ isLoading: true, error: null, descriptor: null })
+    setState({ isLoading: true, error: null, descriptor: null, file: null })
     try {
       const descriptor = await buildDescriptor(file)
-      setState({ isLoading: false, error: null, descriptor })
+      setState({ isLoading: false, error: null, descriptor, file })
     }
     catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to read file'
-      setState({ isLoading: false, error: message, descriptor: null })
+      setState({ isLoading: false, error: message, descriptor: null, file: null })
     }
   }, [])
 
@@ -306,7 +307,7 @@ export function useFileAccess() {
   }, [processFile])
 
   const reset = useCallback(() => {
-    setState({ isLoading: false, error: null, descriptor: null })
+    setState({ isLoading: false, error: null, descriptor: null, file: null })
   }, [])
 
   return {
