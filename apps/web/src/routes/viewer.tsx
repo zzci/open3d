@@ -356,34 +356,16 @@ function ViewerPage() {
     }
   }, [editCount, showToast])
 
-  // Save — pick file FIRST (user gesture), then generate and write data
+  // Save — generate blob first (with progress), then prompt user to pick save location
   const handleSave = useCallback(async () => {
     const file = fileRef.current
     const base = baseDataRef.current
     if (!file || !data || !base || data.count === base.count) { showToast(t('noEdits'), 'info'); return }
 
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
-    const suggestedName = `${baseName}_${ts}.las`
-
-    // Open save picker IMMEDIATELY in user gesture context (before any async work)
-    let fileHandle: any = null
-    if ('showSaveFilePicker' in window) {
-      try {
-        fileHandle = await (window as any).showSaveFilePicker({
-          suggestedName,
-          types: [{ description: 'LAS Point Cloud', accept: { 'application/octet-stream': ['.las'] } }],
-        })
-      }
-      catch (err: unknown) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        throw err
-      }
-    }
-
-    // Now do the slow work
+    // Step 1: Generate the filtered LAS blob (show progress)
     setLoading(true)
     setLoadText(`${t('saving')}...`)
+    let blob: Blob
     try {
       const kept = new Set<string>()
       const dp = data.positions
@@ -391,20 +373,36 @@ function ViewerPage() {
         kept.add(`${(dp[i * 3]! * 1000) | 0},${(dp[i * 3 + 1]! * 1000) | 0},${(dp[i * 3 + 2]! * 1000) | 0}`)
       }
 
-      const blob = await saveFilteredLAS(file, kept, (pct) => {
+      blob = await saveFilteredLAS(file, kept, (pct) => {
         setProgress(pct)
         setLoadText(`${t('saving')}... ${(pct * 100) | 0}%`)
       })
+    }
+    catch (e: unknown) {
+      console.error('Save failed:', e)
+      showToast(e instanceof Error ? e.message : t('saveFailed'), 'error')
+      setLoading(false)
+      return
+    }
+    setLoading(false)
 
-      if (fileHandle) {
-        // Write to user-picked location
-        const writable = await fileHandle.createWritable()
+    // Step 2: Prompt user to save (user gesture from clicking "confirm" or auto-trigger)
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
+    const suggestedName = `${baseName}_${ts}.las`
+
+    try {
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'LAS Point Cloud', accept: { 'application/octet-stream': ['.las'] } }],
+        })
+        const writable = await handle.createWritable()
         await writable.write(blob)
         await writable.close()
         showToast(`${t('saved')} ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
       }
       else {
-        // Fallback: auto-download
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
@@ -414,12 +412,9 @@ function ViewerPage() {
         showToast(`${t('saved')} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
       }
     }
-    catch (e: unknown) {
-      console.error('Save failed:', e)
-      showToast(e instanceof Error ? e.message : t('saveFailed'), 'error')
-    }
-    finally {
-      setLoading(false)
+    catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      showToast(t('saveFailed'), 'error')
     }
   }, [data, fileName, showToast, t])
 
