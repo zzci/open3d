@@ -49,6 +49,9 @@ export function getPaletteTexture(id: PaletteId): DataTexture {
 
   const data = PALETTE_BUILDERS[id]()
   tex = new DataTexture(data, 256, 1, RGBAFormat, FloatType)
+  // Linear interpolation for smooth color transitions between adjacent palette
+  // entries. NearestFilter would be faster but creates visible banding artifacts
+  // when mapping continuous attributes (intensity, height) through the palette.
   tex.minFilter = LinearFilter
   tex.magFilter = LinearFilter
   tex.needsUpdate = true
