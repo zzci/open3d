@@ -80,19 +80,6 @@ export function isLeaf(node: OctreeNode): boolean {
 }
 
 /**
- * Get the total number of children for a node.
- */
-export function childCount(node: OctreeNode): number {
-  let count = 0
-  let mask = node.childMask
-  while (mask > 0) {
-    count += mask & 1
-    mask >>= 1
-  }
-  return count
-}
-
-/**
  * Serialize hierarchy map to a transferable array of OctreeNodes.
  * Used to pass hierarchy from worker to main thread.
  */

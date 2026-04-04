@@ -14,8 +14,6 @@ import { useViewerStore } from '../store'
 // 4. Store results in Zustand
 // ---------------------------------------------------------------------------
 
-let requestIdCounter = 0
-
 export function useSelection(renderer: PointCloudRenderer | null) {
   const selectionMode = useViewerStore(s => s.selectionMode)
   const setSelection = useViewerStore(s => s.setSelection)
@@ -59,11 +57,27 @@ export function useSelection(renderer: PointCloudRenderer | null) {
     if (!worker)
       return Promise.reject(new Error('Selection worker not initialized'))
 
-    const requestId = String(++requestIdCounter)
+    const requestId = crypto.randomUUID()
     return new Promise((resolve) => {
-      pendingResolveRef.current.set(requestId, resolve)
+      const pending = pendingResolveRef.current
+      pending.set(requestId, resolve)
+
+      // Timeout: clean up if worker doesn't respond in 30s
+      const timer = setTimeout(() => {
+        if (pending.has(requestId)) {
+          pending.delete(requestId)
+          resolve({ requestId, type: 'error', payload: 'Selection timed out' } as SelectionResponse)
+        }
+      }, 30_000)
+
+      const originalResolve = resolve
+      pending.set(requestId, (resp) => {
+        clearTimeout(timer)
+        pending.delete(requestId)
+        originalResolve(resp)
+      })
+
       const msg: SelectionRequest = { requestId, type: 'select', payload }
-      // Collect transferables — positions arrays
       const transferables: Transferable[] = payload.tiles.map(t => t.positions.buffer as ArrayBuffer)
       worker.postMessage(msg, transferables)
     })

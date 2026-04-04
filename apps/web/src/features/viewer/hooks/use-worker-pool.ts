@@ -26,7 +26,9 @@ interface WorkerPool {
   readonly poolSize: number
 }
 
-const DEFAULT_POOL_SIZE = 3
+const DEFAULT_POOL_SIZE = typeof navigator !== 'undefined'
+  ? Math.min(Math.max(navigator.hardwareConcurrency ?? 2, 2), 4)
+  : 3
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -84,6 +86,13 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
 
       worker.onerror = (event) => {
         event.preventDefault()
+        // Reject all pending requests on this worker and mark it dead
+        poolWorker.ready = false
+        worker.terminate()
+        for (const [reqId, req] of pending) {
+          req.reject(new Error('Worker crashed'))
+          pending.delete(reqId)
+        }
       }
 
       workers.push(poolWorker)

@@ -275,11 +275,11 @@ async function countPass(
     })
   }
 
-  // Handle edge case: no survivors
+  // Handle edge case: no survivors — preserve original descriptor bounds
   if (survivorCount === 0) {
     return {
       survivorCount: 0,
-      bounds: { min: [0, 0, 0], max: [0, 0, 0] },
+      bounds: descriptor.bounds,
     }
   }
 
@@ -313,71 +313,75 @@ async function writePass(
   const fileHandle = await createTempFile(tempFileName)
   const writable = await fileHandle.createWritable()
 
-  // Write header
-  await writable.write(headerBuf)
-  let bytesWritten = LAS_14_HEADER_SIZE
+  try {
+    // Write header
+    await writable.write(headerBuf)
+    let bytesWritten = LAS_14_HEADER_SIZE
 
-  // Allocate write buffer (1 MB)
-  const writeBuf = new ArrayBuffer(WRITE_BUFFER_SIZE)
-  const writeView = new DataView(writeBuf)
-  let bufferOffset = 0
+    // Allocate write buffer (1 MB)
+    const writeBuf = new ArrayBuffer(WRITE_BUFFER_SIZE)
+    const writeView = new DataView(writeBuf)
+    let bufferOffset = 0
 
-  async function flushBuffer(): Promise<void> {
-    if (bufferOffset > 0) {
-      await writable.write(new Uint8Array(writeBuf, 0, bufferOffset))
-      bytesWritten += bufferOffset
-      bufferOffset = 0
-    }
-  }
-
-  let remaining = pointCount
-  let filePos = offsetToPointData
-  let pointsWritten = 0
-
-  while (remaining > 0 && !state.cancelled) {
-    const batch = Math.min(SOURCE_CHUNK_POINTS, remaining)
-    const buf = await sliceFile(file, filePos, batch * pointRecordLength)
-    const view = new DataView(buf)
-
-    for (let i = 0; i < batch; i++) {
-      const pt = decodePoint(view, i * pointRecordLength, pointFormat, scale, offset)
-
-      if (editLog.length === 0 || pointPassesLog(editLog, pt)) {
-        // Ensure buffer has space for one record
-        if (bufferOffset + outRecordSize > WRITE_BUFFER_SIZE) {
-          await flushBuffer()
-        }
-
-        encodePointRecord(writeView, bufferOffset, pointFormat, scale, offset, pt)
-        bufferOffset += outRecordSize
-        pointsWritten++
+    async function flushBuffer(): Promise<void> {
+      if (bufferOffset > 0) {
+        await writable.write(new Uint8Array(writeBuf, 0, bufferOffset))
+        bytesWritten += bufferOffset
+        bufferOffset = 0
       }
     }
 
-    filePos += batch * pointRecordLength
-    remaining -= batch
+    let remaining = pointCount
+    let filePos = offsetToPointData
+    let pointsWritten = 0
 
+    while (remaining > 0 && !state.cancelled) {
+      const batch = Math.min(SOURCE_CHUNK_POINTS, remaining)
+      const buf = await sliceFile(file, filePos, batch * pointRecordLength)
+      const view = new DataView(buf)
+
+      for (let i = 0; i < batch; i++) {
+        const pt = decodePoint(view, i * pointRecordLength, pointFormat, scale, offset)
+
+        if (editLog.length === 0 || pointPassesLog(editLog, pt)) {
+          // Ensure buffer has space for one record
+          if (bufferOffset + outRecordSize > WRITE_BUFFER_SIZE) {
+            await flushBuffer()
+          }
+
+          encodePointRecord(writeView, bufferOffset, pointFormat, scale, offset, pt)
+          bufferOffset += outRecordSize
+          pointsWritten++
+        }
+      }
+
+      filePos += batch * pointRecordLength
+      remaining -= batch
+
+      progress(requestId, {
+        phase: 'writing',
+        pointsProcessed: pointsWritten,
+        totalPoints: survivorCount,
+        bytesWritten,
+      })
+    }
+
+    // Flush remaining buffer
+    await flushBuffer()
+
+    // Finalize
     progress(requestId, {
-      phase: 'writing',
+      phase: 'finalizing',
       pointsProcessed: pointsWritten,
       totalPoints: survivorCount,
       bytesWritten,
     })
+
+    return bytesWritten
   }
-
-  // Flush remaining buffer
-  await flushBuffer()
-
-  // Finalize
-  progress(requestId, {
-    phase: 'finalizing',
-    pointsProcessed: pointsWritten,
-    totalPoints: survivorCount,
-    bytesWritten,
-  })
-
-  await writable.close()
-  return bytesWritten
+  finally {
+    await writable.close()
+  }
 }
 
 // ---------------------------------------------------------------------------

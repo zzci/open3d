@@ -44,3 +44,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**FEAT-011 Selection system**](FEAT-011.md) `P2`
 - [x] [**FEAT-012 Edit log and undo/redo**](FEAT-012.md) `P2`
 - [x] [**FEAT-013 Streaming local export**](FEAT-013.md) `P3`
+- [x] [**BUG-001 Fix audit findings from code review**](BUG-001.md) `P0`

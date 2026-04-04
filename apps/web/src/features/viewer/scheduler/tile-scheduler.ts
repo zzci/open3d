@@ -262,6 +262,7 @@ export class TileScheduler {
       tile.status = 'evicted'
       tile.data = null
       this.tiles.delete(id)
+      this.inFlight.delete(id)
       this.callbacks.onTileEvicted(id)
     }
   }

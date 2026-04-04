@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-04 04:10 [BUG-P0]
+
+BUG-001: Fixed all audit findings from repository-wide code review:
+- P0: Export worker stream now closed in try-finally (prevents OPFS leaks on error)
+- P1: Worker pool rejects pending requests on onerror + terminates dead workers
+- P1: Scheduler cleans inFlight set on tile eviction (prevents stale decode ghost tiles)
+- P1: Selection hook uses crypto.randomUUID + 30s timeout cleanup (prevents unbounded memory)
+- P1: Export empty bounds now uses descriptor.bounds instead of invalid zeroes
+- P2: Worker pool size adapts to navigator.hardwareConcurrency (2-4 workers)
+- P2: Removed dead code — unused childCount() from hierarchy.ts
+
 ## 2026-04-04 02:10 [progress]
 
 All 4 phases complete (FEAT-001 through FEAT-013 merged to main). Review cron deleted.
