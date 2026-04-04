@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-04 06:15 [progress]
+
+Re-ran repository audit against the current workspace state:
+- fixed since prior audit: root workspace filters now target `@repo/web`, decode worker crash handling is isolated per worker
+- remaining P1 findings: LAS/LAZ intake still lands in a non-functional viewer path, edit-log actions are recorded but not applied to rendered tiles, export still ignores edits (`editLog: []`)
+- remaining P2 findings: cancelling the save picker is treated as a successful export, `lint` currently fails while `test`, `typecheck`, and `build` pass
+
 ## 2026-04-04 06:00 [progress]
 
 PLAN-004 complete — production-quality point cloud rendering:

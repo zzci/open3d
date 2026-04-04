@@ -60,9 +60,10 @@ async function deleteTempFile(name: string): Promise<void> {
 // File save: File System Access API or blob URL fallback
 // ---------------------------------------------------------------------------
 
-async function saveWithPicker(tempFile: File, suggestedName: string): Promise<boolean> {
+/** Returns 'saved' | 'cancelled' | 'unsupported' */
+async function saveWithPicker(tempFile: File, suggestedName: string): Promise<'saved' | 'cancelled' | 'unsupported'> {
   if (!('showSaveFilePicker' in globalThis)) {
-    return false
+    return 'unsupported'
   }
 
   try {
@@ -90,14 +91,13 @@ async function saveWithPicker(tempFile: File, suggestedName: string): Promise<bo
     }
 
     await writable.close()
-    return true
+    return 'saved'
   }
   catch (err: unknown) {
-    // User cancelled the picker — not an error
     if (err instanceof DOMException && err.name === 'AbortError') {
-      return true // User cancelled, but no error
+      return 'cancelled'
     }
-    return false
+    return 'unsupported'
   }
 }
 
@@ -186,8 +186,12 @@ export class ExportSession {
       const baseName = options.descriptor.fileName.replace(FILE_EXTENSION_RE, '')
       const suggestedName = `${baseName}-export.las`
 
-      const saved = await saveWithPicker(tempFile, suggestedName)
-      if (!saved) {
+      const saveResult = await saveWithPicker(tempFile, suggestedName)
+      if (saveResult === 'cancelled') {
+        // User cancelled the save dialog — not an error, not a success
+        return
+      }
+      if (saveResult === 'unsupported') {
         // Fallback to blob URL download
         saveWithBlobUrl(tempFile, suggestedName)
       }

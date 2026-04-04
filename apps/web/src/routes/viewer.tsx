@@ -200,32 +200,31 @@ function ViewerPage() {
       return
 
     cancelRef.current = false
+
+    if (desc.sourceFormat !== 'copc') {
+      // LAS/LAZ indexing not yet wired — reject early without writing to store
+      setLoading(true, 'LAS/LAZ files require indexing which is not yet available. Please use COPC format.')
+      setTimeout(setLoading, 3000, false)
+      return
+    }
+
     setDataset(desc, sourceFile)
 
     try {
-      if (desc.sourceFormat === 'copc') {
-        // COPC path — parse hierarchy directly
-        setLoading(true, 'Reading header...')
-        const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
-          if (cancelRef.current)
-            return
-          setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
-          setLoadingProgress(percent)
-        })
+      setLoading(true, 'Reading header...')
+      const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
         if (cancelRef.current)
           return
-        setLoading(false)
+        setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
+        setLoadingProgress(percent)
+      })
+      if (cancelRef.current)
+        return
+      setLoading(false)
 
-        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
-        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-        setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
-      }
-      else {
-        // LAS/LAZ path — needs indexing first (not yet wired to scheduler)
-        // TODO: integrate indexing.worker.ts when LAS→octree path is complete
-        setLoading(true, 'LAS/LAZ indexing not yet available')
-        setTimeout(setLoading, 2000, false)
-      }
+      const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
+      const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
+      setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
     }
     catch {
       if (!cancelRef.current)
@@ -253,13 +252,17 @@ function ViewerPage() {
           target: [ctrl.target.x, ctrl.target.y, ctrl.target.z],
         }
       : null)
+
+    // Visual feedback: hide deleted points by zeroing their positions in the GPU buffer
+    if (renderer) {
+      for (const [tileId, mask] of sm) {
+        renderer.applyDeletionMask(tileId, mask)
+      }
+    }
     clearSelection()
   }, [editSession, clearSelection])
 
   const handleKeepSelected = useCallback(() => {
-    // Keep selected = invert: delete everything NOT selected
-    // This is equivalent to keepByAABB with the selection bounding box
-    // For now, use the same delete mechanism with inverted masks
     const sm = useViewerStore.getState().selectionMap
     if (sm.size === 0)
       return
@@ -273,6 +276,14 @@ function ViewerPage() {
     }
     const op: DeleteBySelectionOp = { type: 'deleteBySelection', masks }
     editSession.apply(op)
+
+    // Visual feedback: hide non-selected (inverted mask = deleted) points
+    const renderer = rendererRef.current
+    if (renderer) {
+      for (const { tileId, mask } of masks) {
+        renderer.applyDeletionMask(tileId, mask)
+      }
+    }
     clearSelection()
   }, [editSession, clearSelection])
 
@@ -290,7 +301,27 @@ function ViewerPage() {
     session.start({
       file: state.file,
       descriptor: state.descriptor,
-      editLog: [], // TODO: convert activeEntries to EditLogEntry format for export worker
+      editLog: editSession.activeEntries.map((e) => {
+        const op = e.operation
+        // Convert edit-log.ts EditOperation → export-session EditLogEntry
+        // deleteBySelection: TileMask[] → Record<string, Set<number>>
+        // Other ops: pass params through (export worker handles runtime shape)
+        if (op.type === 'deleteBySelection') {
+          const masks: Record<string, Set<number>> = {}
+          for (const tm of op.masks) {
+            const indices = new Set<number>()
+            for (let i = 0; i < tm.mask.length; i++) {
+              if (tm.mask[i] === 1)
+                indices.add(i)
+            }
+            masks[tm.tileId] = indices
+          }
+          return { type: op.type, params: { masks }, timestamp: e.timestamp }
+        }
+        // For keepByAABB, filterByClassification, filterByRange: export worker reads
+        // params by field name at runtime, so pass the operation object directly
+        return { type: op.type, params: op, timestamp: e.timestamp }
+      }) as unknown as import('@/features/viewer/editor/edit-log-types').EditLogEntry[],
       onProgress: (p) => {
         updateExportProgress({
           phase: p.phase,

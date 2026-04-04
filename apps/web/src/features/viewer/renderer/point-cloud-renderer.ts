@@ -221,6 +221,26 @@ export class PointCloudRenderer {
     }
   }
 
+  /** Hide deleted points by moving them to a degenerate position (shader discards w<=0) */
+  applyDeletionMask(nodeId: string, mask: Uint8Array): void {
+    const tile = this.tiles.get(nodeId)
+    if (!tile)
+      return
+    const posAttr = tile.points.geometry.getAttribute('position')
+    if (!posAttr)
+      return
+    const arr = posAttr.array as Float32Array
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] === 1) {
+        // Move deleted point to NaN — Three.js will not render it
+        arr[i * 3] = Number.NaN
+        arr[i * 3 + 1] = Number.NaN
+        arr[i * 3 + 2] = Number.NaN
+      }
+    }
+    posAttr.needsUpdate = true
+  }
+
   // -----------------------------------------------------------------------
   // Color mode & point size — uniform-only changes, no CPU rebuild
   // -----------------------------------------------------------------------
