@@ -49,7 +49,7 @@ function ViewerPage() {
   const [loadText, setLoadText] = useState('')
   const [progress, setProgress] = useState(0)
   const [toast, setToast] = useState<{ msg: string, type: string } | null>(null)
-  const [pointSize, setPointSize] = useState(0.1)
+  const [pointSize, setPointSize] = useState(1)
   const [maxPoints, setMaxPoints] = useState(0) // 0 = all points, no downsampling
   const [colorMode, setColorMode] = useState('rgb')
   const [viewPreset, setViewPreset] = useState<string | null>('persp')
