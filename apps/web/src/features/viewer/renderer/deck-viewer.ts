@@ -403,6 +403,14 @@ export class DeckViewer {
     return vps[0] as { project: (pos: number[]) => number[] }
   }
 
+  /** Get viewProjectionMatrix — projects world coords to NDC [-1,1] (for saveLAS compatibility) */
+  getViewProjectionMatrix(): number[] | null {
+    const vps = this.deck.getViewports()
+    if (!vps?.length) return null
+    const vp = vps[0] as { viewProjectionMatrix: number[] }
+    return Array.from(vp.viewProjectionMatrix)
+  }
+
   /** Get pixel projection matrix — projects world coords directly to CSS pixel coords */
   getPixelProjectionMatrix(): Float64Array | null {
     const vps = this.deck.getViewports()

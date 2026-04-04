@@ -249,10 +249,13 @@ function ViewerPage() {
 
     const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
 
-    // Store EditOp for undo replay
+    // Store EditOp for save replay — use viewProjectionMatrix (NDC), not pixelProjectionMatrix
     const vpSize = viewerRef.current?.getViewportSize()
-    const op: EditOp = { matrix: Array.from(sel.m), rect: sel.rect, vpWidth: vpSize?.width ?? 0, vpHeight: vpSize?.height ?? 0, keepInside: keep }
-    opsRef.current.push(op)
+    const vpm = viewerRef.current?.getViewProjectionMatrix()
+    if (vpm && vpSize) {
+      const op: EditOp = { matrix: vpm, rect: sel.rect, vpWidth: vpSize.width, vpHeight: vpSize.height, keepInside: keep }
+      opsRef.current.push(op)
+    }
 
     setData(newData)
     viewerRef.current?.setHighlight(null)
@@ -347,10 +350,10 @@ function ViewerPage() {
     }
   }, [editCount, showToast])
 
-  // Save
+  // Save — exports current (edited) point cloud by reading original file and filtering
   const handleSave = useCallback(async () => {
     const file = fileRef.current
-    if (!file || !opsRef.current.length) { showToast(t('noEdits'), 'info'); return }
+    if (!file || !data || !opsRef.current.length) { showToast(t('noEdits'), 'info'); return }
     setLoading(true)
     setLoadText(`${t('saving')}...`)
     try {
@@ -392,12 +395,13 @@ function ViewerPage() {
       }
     }
     catch (e: unknown) {
+      console.error('Save failed:', e)
       showToast(e instanceof Error ? e.message : t('saveFailed'), 'error')
     }
     finally {
       setLoading(false)
     }
-  }, [fileName, showToast])
+  }, [data, fileName, showToast, t])
 
   // Auto color for grayscale
   useEffect(() => {
