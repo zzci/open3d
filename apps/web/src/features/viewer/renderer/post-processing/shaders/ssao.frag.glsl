@@ -1,3 +1,4 @@
+#version 300 es
 precision highp float;
 
 uniform sampler2D uDepthTexture;
@@ -16,7 +17,8 @@ uniform int uSampleCount;       // 8, 16, or 32
 // Pre-computed hemisphere kernel (max 32 samples)
 uniform vec3 uKernel[32];
 
-varying vec2 vUv;
+in vec2 vUv;
+out vec4 fragColor;
 
 // Linearize depth from perspective depth buffer [0,1] -> view-space Z
 float linearizeDepth(float d) {
@@ -35,11 +37,11 @@ vec3 viewPositionFromDepth(vec2 uv, float depth) {
 }
 
 void main() {
-  float depth = texture2D(uDepthTexture, vUv).r;
+  float depth = texture(uDepthTexture, vUv).r;
 
   // Background pixels: no occlusion
   if (depth >= 1.0) {
-    gl_FragColor = vec4(1.0);
+    fragColor = vec4(1.0);
     return;
   }
 
@@ -47,13 +49,13 @@ void main() {
 
   // Approximate normal from depth buffer using cross-product of neighbors
   vec3 posRight = viewPositionFromDepth(vUv + vec2(uTexelSize.x, 0.0),
-    texture2D(uDepthTexture, vUv + vec2(uTexelSize.x, 0.0)).r);
+    texture(uDepthTexture, vUv + vec2(uTexelSize.x, 0.0)).r);
   vec3 posUp = viewPositionFromDepth(vUv + vec2(0.0, uTexelSize.y),
-    texture2D(uDepthTexture, vUv + vec2(0.0, uTexelSize.y)).r);
+    texture(uDepthTexture, vUv + vec2(0.0, uTexelSize.y)).r);
   vec3 normal = normalize(cross(posRight - fragPos, posUp - fragPos));
 
   // Random rotation from 4x4 noise texture
-  vec3 randomVec = texture2D(uNoiseTexture, vUv * uNoiseScale).rgb * 2.0 - 1.0;
+  vec3 randomVec = texture(uNoiseTexture, vUv * uNoiseScale).rgb * 2.0 - 1.0;
 
   // Gram-Schmidt to build TBN (tangent-space to view-space)
   vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
@@ -77,7 +79,7 @@ void main() {
     vec2 sampleUv = offset.xy * 0.5 + 0.5;
 
     // Sample depth at projected position
-    float sampleDepth = texture2D(uDepthTexture, sampleUv).r;
+    float sampleDepth = texture(uDepthTexture, sampleUv).r;
 
     // Skip background samples
     if (sampleDepth >= 1.0) continue;
@@ -94,5 +96,5 @@ void main() {
   occlusion = 1.0 - (occlusion / float(count)) * uIntensity;
   occlusion = clamp(occlusion, 0.0, 1.0);
 
-  gl_FragColor = vec4(vec3(occlusion), 1.0);
+  fragColor = vec4(vec3(occlusion), 1.0);
 }

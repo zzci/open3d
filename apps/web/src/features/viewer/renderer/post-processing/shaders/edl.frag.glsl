@@ -1,3 +1,4 @@
+#version 300 es
 precision highp float;
 
 uniform sampler2D uColorTexture;
@@ -9,7 +10,8 @@ uniform float uEdlExponent;    // 0.5-5, default 1.0
 uniform float uNear;
 uniform float uFar;
 
-varying vec2 vUv;
+in vec2 vUv;
+out vec4 fragColor;
 
 // Linearize depth from perspective projection depth buffer
 float linearizeDepth(float d) {
@@ -19,12 +21,12 @@ float linearizeDepth(float d) {
 }
 
 void main() {
-  vec4 color = texture2D(uColorTexture, vUv);
-  float depth = texture2D(uDepthTexture, vUv).r;
+  vec4 color = texture(uColorTexture, vUv);
+  float depth = texture(uDepthTexture, vUv).r;
 
   // Sky / background pixels: no EDL shading
   if (depth >= 1.0) {
-    gl_FragColor = color;
+    fragColor = color;
     return;
   }
 
@@ -44,7 +46,7 @@ void main() {
   float edl = 0.0;
   for (int i = 0; i < 8; i++) {
     vec2 sampleUv = vUv + neighbors[i] * uEdlRadius * uTexelSize;
-    float neighborRawDepth = texture2D(uDepthTexture, sampleUv).r;
+    float neighborRawDepth = texture(uDepthTexture, sampleUv).r;
 
     // Treat background neighbors as no contribution
     if (neighborRawDepth >= 1.0) continue;
@@ -57,5 +59,5 @@ void main() {
   float shade = exp(-pow(edl * uEdlStrength * 300.0, uEdlExponent));
   shade = clamp(shade, 0.0, 1.0);
 
-  gl_FragColor = vec4(color.rgb * shade, color.a);
+  fragColor = vec4(color.rgb * shade, color.a);
 }
