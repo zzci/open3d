@@ -300,7 +300,7 @@ export class DeckViewer {
 
     this.deck = new Deck({
       parent: container as any,
-      views: new OrbitView({ orbitAxis: 'Z' }),
+      views: new OrbitView({ orbitAxis: 'Z', near: 0.01, far: 10000 }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
       parameters: { depthTest: true, clearColor: [0.05, 0.07, 0.09, 1] } as any, // dark bg like aaa/
