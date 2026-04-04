@@ -393,12 +393,11 @@ export class DeckViewer {
     this.updateLayers()
   }
 
-  /** Get the current viewProjectionMatrix for selection math */
-  getViewProjectionMatrix(): number[] | null {
+  /** Get the current viewport for selection projection */
+  getViewport(): { project: (pos: number[]) => number[] } | null {
     const vps = this.deck.getViewports()
-    if (!vps?.length)
-      return null
-    return Array.from((vps[0] as { viewProjectionMatrix: number[] }).viewProjectionMatrix)
+    if (!vps?.length) return null
+    return vps[0] as { project: (pos: number[]) => number[] }
   }
 
   getViewportSize(): { width: number, height: number } {

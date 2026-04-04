@@ -31,7 +31,7 @@ const COLOR_MODES = [
 ]
 
 type InteractionMode = 'navigate' | 'select'
-interface SelectionInfo { matrix: number[], rect: [number, number, number, number], vpWidth: number, vpHeight: number }
+interface SelectionInfo { vp: { project: (pos: number[]) => number[] }, rect: [number, number, number, number] }
 
 function ViewerPage() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -170,25 +170,21 @@ function ViewerPage() {
     const L = Math.min(dragRef.current.sx, cx), T = Math.min(dragRef.current.sy, cy)
     const R = Math.max(dragRef.current.sx, cx), B = Math.max(dragRef.current.sy, cy)
     if (R - L < 5 || B - T < 5) return
-    const m = viewer.getViewProjectionMatrix()
-    if (!m) return
-    const { width: vpW, height: vpH } = viewer.getViewportSize()
+    const vp = viewer.getViewport()
+    if (!vp) return
     const pos = data.positions, n = data.count
     const hl = new Uint8Array(n)
     let found = 0
     for (let i = 0; i < n; i++) {
-      const px = pos[i * 3]!, py = pos[i * 3 + 1]!, pz = pos[i * 3 + 2]!
-      const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
-      if (cw <= 0) continue
-      const sx = ((m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) / cw * 0.5 + 0.5) * vpW
-      const sy = (0.5 - (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) / cw * 0.5) * vpH
+      const screenPos = vp.project([pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!])
+      const sx = screenPos[0]!, sy = screenPos[1]!
       if (sx >= L && sx <= R && sy >= T && sy <= B) { hl[i] = 1; found++ }
     }
     if (!found) return
     viewer.setHighlight(hl)
     setSelectedCount(found)
     setHasSelection(true)
-    selectionRef.current = { matrix: m, rect: [L, T, R, B], vpWidth: vpW, vpHeight: vpH }
+    selectionRef.current = { vp, rect: [L, T, R, B] }
   }, [data, mode])
 
   const clearSelection = useCallback(() => {
@@ -202,14 +198,54 @@ function ViewerPage() {
   const handleDelete = useCallback((keep: boolean) => {
     const sel = selectionRef.current
     if (!sel || !data) return
-    const op: EditOp = { matrix: sel.matrix, rect: sel.rect, vpWidth: sel.vpWidth, vpHeight: sel.vpHeight, keepInside: keep }
-    opsRef.current.push(op)
-    const { result, removedCount } = applyOp(data, op)
-    setData(result)
+    const [L, T, R, B] = sel.rect
+    const { vp } = sel
+    const pos = data.positions, n = data.count
+
+    // Determine which points to remove using viewport projection
+    let removed = 0
+    const bitmap = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const sp = vp.project([pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!])
+      const inside = sp[0]! >= L && sp[0]! <= R && sp[1]! >= T && sp[1]! <= B
+      const shouldDelete = keep ? !inside : inside
+      if (shouldDelete) { bitmap[i] = 1; removed++ }
+    }
+    if (removed === 0) return
+
+    // Compact arrays
+    const nn = n - removed
+    const np = new Float32Array(nn * 3)
+    const nc = new Uint8Array(nn * 3)
+    const ni = new Uint8Array(nn)
+    let j = 0
+    for (let i = 0; i < n; i++) {
+      if (bitmap[i]) continue
+      np[j * 3] = data.positions[i * 3]!
+      np[j * 3 + 1] = data.positions[i * 3 + 1]!
+      np[j * 3 + 2] = data.positions[i * 3 + 2]!
+      nc[j * 3] = data.colors[i * 3]!
+      nc[j * 3 + 1] = data.colors[i * 3 + 1]!
+      nc[j * 3 + 2] = data.colors[i * 3 + 2]!
+      ni[j] = data.intensity[i]!
+      j++
+    }
+
+    const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
+
+    // Store as EditOp for undo (use current viewport matrix)
+    const m = Array.from((vp as unknown as { viewProjectionMatrix: number[] }).viewProjectionMatrix ?? [])
+    const vpSize = viewerRef.current?.getViewportSize()
+    if (m.length && vpSize) {
+      const op: EditOp = { matrix: m, rect: sel.rect, vpWidth: vpSize.width, vpHeight: vpSize.height, keepInside: keep }
+      opsRef.current.push(op)
+    }
+
+    setData(newData)
     viewerRef.current?.setHighlight(null)
-    viewerRef.current?.updateData(result)
+    viewerRef.current?.updateData(newData)
     setEditCount(opsRef.current.length)
-    showToast(`${keep ? 'Kept, removed' : 'Deleted'} ${removedCount.toLocaleString()} pts`, 'success')
+    showToast(`${keep ? 'Kept, removed' : 'Deleted'} ${removed.toLocaleString()} pts`, 'success')
     selectionRef.current = null
     setHasSelection(false)
   }, [data, showToast])
