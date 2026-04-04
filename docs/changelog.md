@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-04 [progress]
+
+FEAT-010 complete: OPFS cache layer — tile/metadata/hierarchy binary storage via OPFS, IndexedDB dataset registry with edit log store, LRU eviction at dataset level (2 GB default), cache manager dialog UI.
+
 ## 2026-04-04 01:05 [progress]
 
 FEAT-002 merged: file access layer with File System Access API, drag-drop, LAS header parsing, COPC/LAZ/LAS detection, DatasetDescriptor types.
