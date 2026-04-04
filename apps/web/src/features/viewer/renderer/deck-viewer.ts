@@ -303,7 +303,6 @@ export class DeckViewer {
       views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
-      useDevicePixels: false, // force DPR=1 — small points stay visible on retina displays
       parameters: { depthTest: true, clearColor: [0.05, 0.07, 0.09, 1] } as any, // dark bg like aaa/
       onViewStateChange: ({ viewState }: any) => {
         this.viewState = viewState
@@ -408,6 +407,19 @@ export class DeckViewer {
     if (!this.data || !this.colorBuf)
       return
     computeColors(this.data, this.config.colorMode, this.colorBuf)
+
+    // Boost brightness for sub-pixel points — compensate area loss
+    // At radius=1, area=π≈3.14px. At radius=0.3, area≈0.28px → 11x less visible.
+    // Boost factor = 1/radius² clamped to [1, 4] to keep colors from saturating.
+    const r = this.config.pointSizeMultiplier
+    if (r < 1) {
+      const boost = Math.min(4, 1 / (r * r))
+      const buf = this.colorBuf
+      const n = this.data.count * 3
+      for (let i = 0; i < n; i++) {
+        buf[i] = Math.min(255, (buf[i]! * boost) | 0)
+      }
+    }
 
     // Apply highlight overlay
     if (this.highlightBuf) {
