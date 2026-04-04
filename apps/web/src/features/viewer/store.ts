@@ -10,6 +10,8 @@ export interface DatasetInfo {
   totalPoints: number
 }
 
+export type ExportPhase = 'counting' | 'writing' | 'finalizing'
+
 export interface ViewerState {
   // Render settings
   colorMode: ColorMode
@@ -31,6 +33,14 @@ export interface ViewerState {
   loadedPointCount: number
   activeTileCount: number
   fps: number
+
+  // Export
+  isExporting: boolean
+  exportProgress: number
+  exportPhase: ExportPhase | ''
+  exportPointsProcessed: number
+  exportTotalPoints: number
+  exportBytesWritten: number
 }
 
 export interface ViewerActions {
@@ -42,6 +52,8 @@ export interface ViewerActions {
   setLoadingProgress: (progress: number) => void
   setDataset: (descriptor: DatasetDescriptor, file: File) => void
   updateStats: (stats: { loadedPointCount: number, activeTileCount: number, fps: number }) => void
+  setExporting: (isExporting: boolean) => void
+  updateExportProgress: (data: { phase: ExportPhase, pointsProcessed: number, totalPoints: number, bytesWritten: number }) => void
   reset: () => void
 }
 
@@ -65,6 +77,12 @@ const initialState: ViewerState = {
   loadedPointCount: 0,
   activeTileCount: 0,
   fps: 0,
+  isExporting: false,
+  exportProgress: 0,
+  exportPhase: '',
+  exportPointsProcessed: 0,
+  exportTotalPoints: 0,
+  exportBytesWritten: 0,
 }
 
 export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
@@ -102,6 +120,25 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   }),
 
   updateStats: stats => set(stats),
+
+  setExporting: isExporting => set({
+    isExporting,
+    ...(!isExporting && {
+      exportProgress: 0,
+      exportPhase: '' as const,
+      exportPointsProcessed: 0,
+      exportTotalPoints: 0,
+      exportBytesWritten: 0,
+    }),
+  }),
+
+  updateExportProgress: ({ phase, pointsProcessed, totalPoints, bytesWritten }) => set({
+    exportPhase: phase,
+    exportPointsProcessed: pointsProcessed,
+    exportTotalPoints: totalPoints,
+    exportBytesWritten: bytesWritten,
+    exportProgress: totalPoints > 0 ? (pointsProcessed / totalPoints) * 100 : 0,
+  }),
 
   reset: () => set(initialState),
 }))

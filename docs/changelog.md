@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-04 03:00 [progress]
+
+FEAT-013: Streaming local export. Two-pass Export Worker reads source LAS file sequentially — pass 1 counts surviving points and computes bounds, pass 2 writes LAS 1.4 header + filtered points in 1 MB chunks to OPFS temp file. ExportSession orchestrates worker lifecycle with File System Access API save picker (blob URL fallback for Firefox/Safari). Cancellation via worker message. Export dialog shows phase, progress bar, point count, bytes written. Toolbar Export LAS button (disabled when no dataset). Zustand store extended with export state slice. Temporary EditLogEntry types for FEAT-012 integration.
+
 ## 2026-04-04 02:20 [progress]
 
 FEAT-007: Basic viewer UI. Zustand store for viewer state (color mode, point size, budget, quality preset, loading, stats). shadcn/ui components (Button, Slider, Select, Dialog). Toolbar with color mode picker, point size/budget sliders, quality presets. Status bar with point count, tiles, FPS, dataset info. Progress overlay with cancel. ViewerCanvas component mounting PointCloudRenderer. /viewer route composing all components with COPC loading, scheduler integration, camera idle detection, and stats polling. Enhanced FileOpener and useFileAccess to pass raw File object for scheduler. Format utils extracted to lib/format.ts.
