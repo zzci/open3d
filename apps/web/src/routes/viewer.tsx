@@ -224,26 +224,26 @@ function ViewerPage() {
     setLastSelection(null)
   }, [])
 
-  // File opener
-  if (!loaded && !loading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-100" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
-        <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-neutral-300 p-12">
-          <h1 className="text-2xl font-bold text-neutral-700">Open3D Point Cloud Viewer</h1>
-          <p className="text-sm text-neutral-500">Drag & drop a .las file, or click to browse</p>
-          <label className="cursor-pointer rounded bg-neutral-800 px-6 py-2 text-sm text-white hover:bg-neutral-700">
-            Browse Files
-            <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
-          </label>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="relative h-screen w-screen">
+      {/* deck.gl container — always mounted so useEffect can init Deck */}
       <div ref={containerRef} className="absolute inset-0" style={{ cursor: mode === 'select' ? 'crosshair' : 'default' }} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} />
       <div ref={rectRef} className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
+
+      {/* File opener overlay */}
+      {!loaded && !loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-neutral-100" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+          <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-neutral-300 p-12">
+            <h1 className="text-2xl font-bold text-neutral-700">Open3D Point Cloud Viewer</h1>
+            <p className="text-sm text-neutral-500">Drag & drop a .las file, or click to browse</p>
+            <label className="cursor-pointer rounded bg-neutral-800 px-6 py-2 text-sm text-white hover:bg-neutral-700">
+              Browse Files
+              <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
+            </label>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80">
           <div className="flex flex-col items-center gap-3">
