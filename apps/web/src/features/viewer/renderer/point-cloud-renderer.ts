@@ -1,4 +1,5 @@
 import type { TileData } from '../data/types'
+import type { EdlParams } from './post-processing/edl-pass'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -7,6 +8,7 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorMode } from './color-modes'
+import { RenderPipeline } from './post-processing/render-pipeline'
 import { disposeSharedResources, TileMesh } from './tile-mesh'
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,7 @@ export class PointCloudRenderer {
   private readonly tiles = new Map<string, TileMesh>()
   private readonly fpsTracker = new FpsTracker()
   private readonly resizeObserver: ResizeObserver
+  private readonly pipeline: RenderPipeline
 
   private animationFrameId = 0
   private lastFrameTime = 0
@@ -108,6 +111,13 @@ export class PointCloudRenderer {
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
     this.resizeObserver.observe(canvas)
     this.handleResize()
+
+    // Multi-pass render pipeline (EDL post-processing)
+    const { clientWidth: w, clientHeight: h } = canvas
+    this.pipeline = new RenderPipeline(
+      Math.max(1, w) * this.webglRenderer.getPixelRatio(),
+      Math.max(1, h) * this.webglRenderer.getPixelRatio(),
+    )
 
     // Start render loop
     this.lastFrameTime = performance.now()
@@ -192,6 +202,14 @@ export class PointCloudRenderer {
     }
   }
 
+  updateEdlEnabled(enabled: boolean): void {
+    this.pipeline.edlEnabled = enabled
+  }
+
+  updateEdlParams(params: Partial<EdlParams>): void {
+    this.pipeline.updateEdlParams(params)
+  }
+
   /** Expose tiles map for coarse AABB filtering in selection pipeline */
   getTiles(): ReadonlyMap<string, TileMesh> {
     return this.tiles
@@ -228,6 +246,7 @@ export class PointCloudRenderer {
       this.tiles.delete(id)
     }
 
+    this.pipeline.dispose()
     disposeSharedResources()
     this.webglRenderer.dispose()
   }
@@ -246,7 +265,7 @@ export class PointCloudRenderer {
     this.lastFrameTime = now
 
     this.controls.update()
-    this.webglRenderer.render(this.scene, this.camera)
+    this.pipeline.render(this.webglRenderer, this.scene, this.camera)
   }
 
   private handleResize(): void {
@@ -257,6 +276,9 @@ export class PointCloudRenderer {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.webglRenderer.setSize(w, h, false)
+
+    const dpr = this.webglRenderer.getPixelRatio()
+    this.pipeline.setSize(w * dpr, h * dpr)
   }
 
   private buildUniforms(data: TileData): PointUniforms {

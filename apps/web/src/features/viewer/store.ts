@@ -25,6 +25,12 @@ export interface ViewerState {
   pointBudget: number
   qualityPreset: QualityPreset
 
+  // EDL (Eye-Dome Lighting)
+  edlEnabled: boolean
+  edlRadius: number // 1-5
+  edlStrength: number // 0-1
+  edlExponent: number // 0.5-5
+
   // Loading
   isLoading: boolean
   loadingProgress: number
@@ -61,6 +67,10 @@ export interface ViewerActions {
   setBlendMode: (mode: BlendMode) => void
   setPointBudget: (budget: number) => void
   setQualityPreset: (preset: QualityPreset) => void
+  setEdlEnabled: (enabled: boolean) => void
+  setEdlRadius: (radius: number) => void
+  setEdlStrength: (strength: number) => void
+  setEdlExponent: (exponent: number) => void
   setLoading: (isLoading: boolean, phase?: string) => void
   setLoadingProgress: (progress: number) => void
   setDataset: (descriptor: DatasetDescriptor, file: File) => void
@@ -87,6 +97,10 @@ const initialState: ViewerState = {
   blendMode: 'opaque',
   pointBudget: POINT_BUDGETS.medium,
   qualityPreset: 'medium',
+  edlEnabled: true,
+  edlRadius: 2,
+  edlStrength: 0.5,
+  edlExponent: 1.0,
   isLoading: false,
   loadingProgress: 0,
   loadingPhase: '',
@@ -119,6 +133,14 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   setBlendMode: mode => set({ blendMode: mode }),
 
   setPointBudget: budget => set({ pointBudget: budget }),
+
+  setEdlEnabled: enabled => set({ edlEnabled: enabled }),
+
+  setEdlRadius: radius => set({ edlRadius: radius }),
+
+  setEdlStrength: strength => set({ edlStrength: strength }),
+
+  setEdlExponent: exponent => set({ edlExponent: exponent }),
 
   setQualityPreset: (preset) => {
     set({

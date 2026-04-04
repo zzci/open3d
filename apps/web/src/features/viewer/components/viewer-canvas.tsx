@@ -14,6 +14,10 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const rendererRef = useRef<PointCloudRenderer | null>(null)
   const colorMode = useViewerStore(s => s.colorMode)
   const pointSize = useViewerStore(s => s.pointSize)
+  const edlEnabled = useViewerStore(s => s.edlEnabled)
+  const edlRadius = useViewerStore(s => s.edlRadius)
+  const edlStrength = useViewerStore(s => s.edlStrength)
+  const edlExponent = useViewerStore(s => s.edlExponent)
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
 
@@ -45,6 +49,20 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   useEffect(() => {
     rendererRef.current?.updatePointSize(pointSize)
   }, [pointSize])
+
+  // Sync EDL enabled
+  useEffect(() => {
+    rendererRef.current?.updateEdlEnabled(edlEnabled)
+  }, [edlEnabled])
+
+  // Sync EDL parameters
+  useEffect(() => {
+    rendererRef.current?.updateEdlParams({
+      radius: edlRadius,
+      strength: edlStrength,
+      exponent: edlExponent,
+    })
+  }, [edlRadius, edlStrength, edlExponent])
 
   // Sync selection highlight to renderer
   useEffect(() => {
