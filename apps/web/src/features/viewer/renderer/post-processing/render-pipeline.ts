@@ -5,6 +5,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   DepthTexture,
+  GLSL3,
   Mesh,
   OrthographicCamera,
   RawShaderMaterial,
@@ -69,6 +70,7 @@ export class RenderPipeline {
 
     // Composite pass: final output with gamma
     this.compositeMaterial = new RawShaderMaterial({
+      glslVersion: GLSL3,
       vertexShader: fullscreenVertShader,
       fragmentShader: compositeFragShader,
       uniforms: {

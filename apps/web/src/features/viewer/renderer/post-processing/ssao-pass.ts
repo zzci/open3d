@@ -1,4 +1,5 @@
-import type { Texture } from 'three'
+import type { Texture,
+} from 'three'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -13,6 +14,7 @@ import {
   UnsignedByteType,
   Vector2,
   Vector3,
+  GLSL3,
 } from 'three'
 import fullscreenVertShader from './shaders/fullscreen.vert.glsl?raw'
 import ssaoBlurFragShader from './shaders/ssao-blur.frag.glsl?raw'

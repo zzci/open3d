@@ -1,6 +1,4 @@
-import type {
-  Texture,
-} from 'three'
+import type { Texture } from 'three'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -9,6 +7,7 @@ import {
   RawShaderMaterial,
   Scene,
   Vector2,
+  GLSL3,
 } from 'three'
 import fragmentShader from './shaders/edl.frag.glsl?raw'
 import vertexShader from './shaders/fullscreen.vert.glsl?raw'
@@ -64,6 +63,7 @@ export class EdlPass {
 
   constructor() {
     this.material = new RawShaderMaterial({
+      glslVersion: GLSL3,
       vertexShader,
       fragmentShader,
       uniforms: {
