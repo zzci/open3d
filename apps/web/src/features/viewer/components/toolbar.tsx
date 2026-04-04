@@ -45,6 +45,10 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
   const setPointSize = useViewerStore(s => s.setPointSize)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
   const setQualityPreset = useViewerStore(s => s.setQualityPreset)
+  const edlEnabled = useViewerStore(s => s.edlEnabled)
+  const edlStrength = useViewerStore(s => s.edlStrength)
+  const setEdlEnabled = useViewerStore(s => s.setEdlEnabled)
+  const setEdlStrength = useViewerStore(s => s.setEdlStrength)
   const selectionMode = useViewerStore(s => s.selectionMode)
   const setSelectionMode = useViewerStore(s => s.setSelectionMode)
   const selectedPointCount = useViewerStore(s => s.selectedPointCount)
@@ -127,6 +131,38 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
             {QUALITY_LABELS[preset]}
           </Button>
         ))}
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
+      {/* EDL (Eye-Dome Lighting) */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant={edlEnabled ? 'default' : 'ghost'}
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => setEdlEnabled(!edlEnabled)}
+        >
+          EDL
+        </Button>
+        {edlEnabled && (
+          <>
+            <Slider
+              min={0}
+              max={1}
+              step={0.05}
+              value={[edlStrength]}
+              onValueChange={([v]) => {
+                if (v !== undefined)
+                  setEdlStrength(v)
+              }}
+              className="w-16"
+            />
+            <span className="w-6 text-right text-xs tabular-nums">
+              {Math.round(edlStrength * 100)}
+            </span>
+          </>
+        )}
       </div>
 
       <div className="h-4 w-px bg-border" />

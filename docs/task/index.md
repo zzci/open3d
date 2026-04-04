@@ -47,7 +47,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**BUG-001 Fix audit findings from code review**](BUG-001.md) `P0`
 - [x] [**AUDIT-001 Record repository audit report**](AUDIT-001.md) `P1`
 - [-] [**FEAT-014 Streaming multi-pass indexing for large LAS files**](FEAT-014.md) `P1`
-- [ ] [**FEAT-015 Eye-Dome Lighting (EDL) multi-pass rendering**](FEAT-015.md) `P1`
+- [x] [**FEAT-015 Eye-Dome Lighting (EDL) multi-pass rendering**](FEAT-015.md) `P1`
 - [ ] [**FEAT-016 Adaptive point sizing from octree spacing**](FEAT-016.md) `P1`
 - [x] [**FEAT-017 Smooth point edges with Gaussian alpha falloff**](FEAT-017.md) `P1`
 - [ ] [**FEAT-018 Production color palettes**](FEAT-018.md) `P1`
