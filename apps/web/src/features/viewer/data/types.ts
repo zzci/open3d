@@ -33,6 +33,51 @@ export interface FileAccessState {
   descriptor: DatasetDescriptor | null
 }
 
+// --- Octree hierarchy types ---
+
+export interface OctreeNode {
+  id: string // COPC key "D-X-Y-Z"
+  level: number
+  bounds: Bounds
+  pointCount: number
+  childMask: number // bitmask of which children exist (0-255)
+  byteOffset: number
+  byteSize: number
+}
+
+// --- Worker communication protocol ---
+
+export interface WorkerRequest {
+  requestId: string
+  type: string
+  payload: unknown
+}
+
+export interface WorkerResponse {
+  requestId: string
+  type: 'result' | 'progress' | 'error'
+  payload: unknown
+  transfer?: ArrayBuffer[]
+}
+
+// --- Metadata worker specific messages ---
+
+export interface ParseMetadataPayload {
+  file: File
+}
+
+export interface MetadataResult {
+  descriptor: DatasetDescriptor
+  hierarchy: OctreeNode[]
+}
+
+export interface ProgressPayload {
+  phase: string
+  percent: number
+}
+
+// --- Constants ---
+
 export const LAS_MAGIC = 'LASF'
 
 export const POINT_FORMAT_ATTRIBUTES: Record<number, string[]> = {
