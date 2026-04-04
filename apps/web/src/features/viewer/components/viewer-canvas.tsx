@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useSelection } from '../hooks/use-selection'
 import { PointCloudRenderer } from '../renderer/point-cloud-renderer'
+import { RENDER_MODES } from '../renderer/render-modes'
 import { useViewerStore } from '../store'
 import { SelectionOverlay } from './selection-overlay'
 
@@ -12,6 +13,7 @@ interface ViewerCanvasProps {
 export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<PointCloudRenderer | null>(null)
+  const renderMode = useViewerStore(s => s.renderMode)
   const colorMode = useViewerStore(s => s.colorMode)
   const paletteId = useViewerStore(s => s.paletteId)
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
@@ -40,6 +42,9 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
       useViewerStore.getState().setDpiAutoDownscaled(true)
     })
 
+    // Apply initial render mode settings
+    renderer.applyRenderMode(RENDER_MODES[renderMode])
+
     rendererRef.current = renderer
     onRendererReady(renderer)
 
@@ -51,6 +56,11 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     // Only mount/unmount on canvas — settings are synced separately
     // eslint-disable-next-line react/exhaustive-deps
   }, [])
+
+  // Sync render mode
+  useEffect(() => {
+    rendererRef.current?.applyRenderMode(RENDER_MODES[renderMode])
+  }, [renderMode])
 
   // Sync color mode
   useEffect(() => {

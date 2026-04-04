@@ -2,6 +2,7 @@ import type { TileData } from '../data/types'
 import type { DpiScale, IntensityNormMode } from '../store'
 import type { PaletteId } from './palettes/palette-registry'
 import type { EdlParams } from './post-processing/edl-pass'
+import type { RenderMode } from './render-modes'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -277,6 +278,17 @@ export class PointCloudRenderer {
     }
   }
 
+  applyRenderMode(mode: RenderMode): void {
+    this.updatePointShape(mode.pointShape)
+    this.updateBlendMode(mode.blendMode)
+    this.updateEdlEnabled(mode.edlEnabled)
+    this.renderPipeline.ssaoEnabled = mode.ssaoEnabled
+
+    for (const tile of this.tiles.values()) {
+      tile.updateUniforms({ renderModeSizing: mode.sizingMultiplier })
+    }
+  }
+
   updatePalette(paletteId: PaletteId): void {
     for (const tile of this.tiles.values()) {
       tile.setPaletteTexture(getPaletteTexture(paletteId))
@@ -419,6 +431,7 @@ export class PointCloudRenderer {
     return {
       nodeSpacing: data.spacing ?? 1.0,
       sizeMultiplier: this.config.sizeMultiplier,
+      renderModeSizing: 1.0,
       screenHeight: this.canvas.clientHeight || 600,
       fov: fovRad,
       colorMode: this.config.colorMode,

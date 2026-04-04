@@ -1,5 +1,6 @@
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import type { EdlParams } from './edl-pass'
+import type { SsaoParams } from './ssao-pass'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -12,6 +13,7 @@ import {
   WebGLRenderTarget,
 } from 'three'
 import { EdlPass } from './edl-pass'
+import { SsaoPass } from './ssao-pass'
 import compositeFragShader from './shaders/composite.frag.glsl?raw'
 import fullscreenVertShader from './shaders/fullscreen.vert.glsl?raw'
 
@@ -26,7 +28,10 @@ export interface RenderPipelineOptions {
 export class RenderPipeline {
   private sceneTarget: WebGLRenderTarget
   private edlTarget: WebGLRenderTarget
+  private ssaoTarget: WebGLRenderTarget
+  private ssaoBlurTarget: WebGLRenderTarget
   private readonly edlPass: EdlPass
+  private readonly ssaoPass: SsaoPass
 
   // Composite pass (final output with gamma)
   private readonly compositeScene = new ThreeScene()
@@ -37,6 +42,7 @@ export class RenderPipeline {
   private width: number
   private height: number
   private _edlEnabled = true
+  private _ssaoEnabled = false
   private _msaaSamples: number
 
   constructor(width: number, height: number, options?: Partial<RenderPipelineOptions>) {
@@ -50,15 +56,24 @@ export class RenderPipeline {
     // Pass 2 target: EDL output (no depth needed, no MSAA)
     this.edlTarget = new WebGLRenderTarget(width, height)
 
+    // SSAO targets
+    this.ssaoTarget = new WebGLRenderTarget(width, height)
+    this.ssaoBlurTarget = new WebGLRenderTarget(width, height)
+
     // EDL post-processing pass
     this.edlPass = new EdlPass()
 
-    // Pass 3: composite to screen
+    // SSAO post-processing pass
+    this.ssaoPass = new SsaoPass()
+
+    // Composite pass: final output with gamma
     this.compositeMaterial = new RawShaderMaterial({
       vertexShader: fullscreenVertShader,
       fragmentShader: compositeFragShader,
       uniforms: {
         uInputTexture: { value: null },
+        uSsaoTexture: { value: null },
+        uSsaoEnabled: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -80,6 +95,14 @@ export class RenderPipeline {
     this._edlEnabled = value
   }
 
+  get ssaoEnabled(): boolean {
+    return this._ssaoEnabled
+  }
+
+  set ssaoEnabled(value: boolean) {
+    this._ssaoEnabled = value
+  }
+
   get msaaSamples(): number {
     return this._msaaSamples
   }
@@ -95,7 +118,9 @@ export class RenderPipeline {
 
   /** Render the full pipeline */
   render(webglRenderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): void {
-    if (!this._edlEnabled) {
+    const needsFbo = this._edlEnabled || this._ssaoEnabled
+
+    if (!needsFbo) {
       // Bypass: render directly to screen
       webglRenderer.setRenderTarget(null)
       webglRenderer.render(scene, camera)
@@ -107,21 +132,56 @@ export class RenderPipeline {
     webglRenderer.clear()
     webglRenderer.render(scene, camera)
 
-    // Pass 2: EDL post-processing
-    this.edlPass.setInputs(
-      this.sceneTarget.texture,
-      this.sceneTarget.depthTexture!,
-      this.width,
-      this.height,
-    )
-    this.edlPass.setCameraBounds(camera.near, camera.far)
+    // Determine the color source for the composite pass
+    let colorSource = this.sceneTarget.texture
 
-    webglRenderer.setRenderTarget(this.edlTarget)
-    webglRenderer.clear()
-    webglRenderer.render(this.edlPass.scene, this.edlPass.camera)
+    // Pass 2: EDL post-processing (optional)
+    if (this._edlEnabled) {
+      this.edlPass.setInputs(
+        this.sceneTarget.texture,
+        this.sceneTarget.depthTexture!,
+        this.width,
+        this.height,
+      )
+      this.edlPass.setCameraBounds(camera.near, camera.far)
 
-    // Pass 3: Composite to screen with gamma
-    this.compositeMaterial.uniforms.uInputTexture!.value = this.edlTarget.texture
+      webglRenderer.setRenderTarget(this.edlTarget)
+      webglRenderer.clear()
+      webglRenderer.render(this.edlPass.scene, this.edlPass.camera)
+      colorSource = this.edlTarget.texture
+    }
+
+    // SSAO passes (optional)
+    if (this._ssaoEnabled) {
+      // SSAO compute pass
+      this.ssaoPass.setInputs(
+        this.sceneTarget.depthTexture!,
+        this.width,
+        this.height,
+      )
+      this.ssaoPass.setCameraMatrices(
+        camera.projectionMatrix,
+        camera.near,
+        camera.far,
+      )
+
+      webglRenderer.setRenderTarget(this.ssaoTarget)
+      webglRenderer.clear()
+      webglRenderer.render(this.ssaoPass.scene, this.ssaoPass.camera)
+
+      // SSAO blur pass
+      this.ssaoPass.setBlurInput(this.ssaoTarget.texture)
+      webglRenderer.setRenderTarget(this.ssaoBlurTarget)
+      webglRenderer.clear()
+      webglRenderer.render(this.ssaoPass.blurScene, this.ssaoPass.blurCamera)
+    }
+
+    // Composite pass: merge color + SSAO + gamma
+    this.compositeMaterial.uniforms.uInputTexture!.value = colorSource
+    this.compositeMaterial.uniforms.uSsaoEnabled!.value = this._ssaoEnabled ? 1 : 0
+    if (this._ssaoEnabled) {
+      this.compositeMaterial.uniforms.uSsaoTexture!.value = this.ssaoBlurTarget.texture
+    }
     webglRenderer.setRenderTarget(null)
     webglRenderer.clear()
     webglRenderer.render(this.compositeScene, this.compositeCamera)
@@ -130,6 +190,11 @@ export class RenderPipeline {
   /** Update EDL parameters */
   updateEdlParams(params: Partial<EdlParams>): void {
     this.edlPass.updateParams(params)
+  }
+
+  /** Update SSAO parameters */
+  updateSsaoParams(params: Partial<SsaoParams>): void {
+    this.ssaoPass.updateParams(params)
   }
 
   /** Handle resize — recreate render targets at actual pixel dimensions */
@@ -145,12 +210,21 @@ export class RenderPipeline {
 
     this.edlTarget.dispose()
     this.edlTarget = new WebGLRenderTarget(width, height)
+
+    this.ssaoTarget.dispose()
+    this.ssaoTarget = new WebGLRenderTarget(width, height)
+
+    this.ssaoBlurTarget.dispose()
+    this.ssaoBlurTarget = new WebGLRenderTarget(width, height)
   }
 
   dispose(): void {
     this.sceneTarget.dispose()
     this.edlTarget.dispose()
+    this.ssaoTarget.dispose()
+    this.ssaoBlurTarget.dispose()
     this.edlPass.dispose()
+    this.ssaoPass.dispose()
     this.compositeMaterial.dispose()
     this.compositeQuad.geometry.dispose()
   }
