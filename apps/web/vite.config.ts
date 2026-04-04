@@ -12,6 +12,7 @@ export default defineConfig({
     react(),
   ],
   server: {
+    port: 7000,
     host: '0.0.0.0',
     allowedHosts: true,
   },
