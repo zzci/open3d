@@ -32,7 +32,7 @@ Each task is a single line linking to its detail file. All detailed information 
 ## Tasks
 
 - [x] [**FEAT-001 Initialize web frontend project**](FEAT-001.md) `P1`
-- [-] [**FEAT-002 Implement file access layer**](FEAT-002.md) `P1`
+- [x] [**FEAT-002 Implement file access layer**](FEAT-002.md) `P1`
 - [ ] [**FEAT-003 COPC metadata and hierarchy parsing**](FEAT-003.md) `P1`
 - [ ] [**FEAT-004 Tile decode Worker**](FEAT-004.md) `P1`
 - [ ] [**FEAT-005 Client tile scheduler**](FEAT-005.md) `P1`

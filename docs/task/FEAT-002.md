@@ -1,6 +1,6 @@
 # FEAT-002 Implement file access layer
 
-- **status**: in_progress
+- **status**: completed
 - **priority**: P1
 - **owner**: bkd:wtkzwi82
 - **createdAt**: 2026-04-04 01:30
