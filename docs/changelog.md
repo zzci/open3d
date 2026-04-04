@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-04 01:35 [progress]
+
+Merged FEAT-004, FEAT-005, FEAT-009:
+- FEAT-004: Tile decode Worker + worker pool (2-4 instances)
+- FEAT-005: Client tile scheduler with LOD policy, frustum culling, point budget
+- FEAT-009: Local indexing Worker — LAS/LAZ → octree with LOD, OPFS storage, progress/cancel
+
 ## 2026-04-04 01:20 [progress]
 
 Merged FEAT-003, FEAT-008, FEAT-010:
