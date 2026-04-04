@@ -255,7 +255,7 @@ export class DeckViewer {
       parent: container as any,
       views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
-      controller: { scrollZoom: { speed: 0.05, smooth: true }, touchZoom: true, doubleClickZoom: true, keyboard: true, inertia: 300 },
+      controller: { scrollZoom: { speed: 0.1, smooth: true }, touchZoom: true, doubleClickZoom: true, keyboard: true, inertia: 200 } as any,
       parameters: { depthTest: true, clearColor: [0.86, 0.87, 0.88, 1] } as any,
       onViewStateChange: ({ viewState }: any) => {
         this.viewState = viewState
@@ -301,7 +301,7 @@ export class DeckViewer {
   setController(enabled: boolean): void {
     this.deck.setProps({
       controller: enabled
-        ? { scrollZoom: { speed: 0.05, smooth: true }, touchZoom: true, doubleClickZoom: true, keyboard: true, inertia: 300 }
+        ? { scrollZoom: { speed: 0.1, smooth: true }, touchZoom: true, doubleClickZoom: true, keyboard: true, inertia: 200 }
         : false,
     })
   }
@@ -404,8 +404,8 @@ export class DeckViewer {
               getNormal: { value: normals, size: 3 },
             },
           },
-          pointSize: this.data.avgSpacing * this.config.pointSizeMultiplier,
-          sizeUnits: 'meters' as const,
+          pointSize: this.config.pointSizeMultiplier,
+          sizeUnits: 'pixels' as const,
           material: false,
         }),
       ],
