@@ -303,6 +303,7 @@ export class DeckViewer {
       views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
+      useDevicePixels: false, // force DPR=1 — small points stay visible on retina displays
       parameters: { depthTest: true, clearColor: [0.05, 0.07, 0.09, 1] } as any, // dark bg like aaa/
       onViewStateChange: ({ viewState }: any) => {
         this.viewState = viewState
