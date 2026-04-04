@@ -1,5 +1,6 @@
 import type { TileData } from '../data/types'
 import type { IntensityNormMode } from '../store'
+import type { PaletteId } from './palettes/palette-registry'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -8,6 +9,7 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorMode } from './color-modes'
+import { disposePalettes, getPaletteTexture } from './palettes/palette-registry'
 import { disposeSharedResources, TileMesh } from './tile-mesh'
 
 // ---------------------------------------------------------------------------
@@ -202,6 +204,12 @@ export class PointCloudRenderer {
     }
   }
 
+  updatePalette(paletteId: PaletteId): void {
+    for (const tile of this.tiles.values()) {
+      tile.setPaletteTexture(getPaletteTexture(paletteId))
+    }
+  }
+
   /** Expose tiles map for coarse AABB filtering in selection pipeline */
   getTiles(): ReadonlyMap<string, TileMesh> {
     return this.tiles
@@ -239,6 +247,7 @@ export class PointCloudRenderer {
     }
 
     disposeSharedResources()
+    disposePalettes()
     this.webglRenderer.dispose()
   }
 
