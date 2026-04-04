@@ -362,6 +362,12 @@ function ViewerPage() {
     const base = baseDataRef.current
     if (!file || !data || !base || data.count === base.count) { showToast(t('noEdits'), 'info'); return }
 
+    // Block save if data was downsampled — would silently lose unsampled points
+    if (maxPoints > 0 && base.count < totalPoints) {
+      showToast(t('saveRequiresAll'), 'error')
+      return
+    }
+
     // Step 1: Generate the filtered LAS blob (show progress)
     setLoading(true)
     setLoadText(`${t('saving')}...`)
@@ -446,7 +452,7 @@ function ViewerPage() {
       e.preventDefault()
       e.stopPropagation()
       const f = e.dataTransfer?.files[0]
-      if (f && /\.la[sz]|.ply$/i.test(f.name)) handleFile(f)
+      if (f && /\.las|.ply$/i.test(f.name)) handleFile(f)
     }
     window.addEventListener('dragover', prevent)
     window.addEventListener('drop', drop)
@@ -512,7 +518,7 @@ function ViewerPage() {
       <div className={`absolute z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-3 right-3 top-3' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
-          <input type="file" accept=".las,.laz,.ply" className="hidden" onChange={handleInputChange} />
+          <input type="file" accept=".las,.ply" className="hidden" onChange={handleInputChange} />
         </label>
 
         {fileName && (

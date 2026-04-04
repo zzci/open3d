@@ -299,8 +299,9 @@ export class DeckViewer {
     }
 
     this.deck = new Deck({
-      parent: container as any,
+      // @ts-expect-error glOptions not in DeckProps type but works at runtime
       glOptions: { alpha: false },
+      parent: container as any,
       views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
