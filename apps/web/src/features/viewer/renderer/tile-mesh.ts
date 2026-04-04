@@ -50,6 +50,7 @@ const POINT_SHAPE_VALUE: Record<PointShape, number> = { circle: 0, gaussian: 1 }
 export interface PointUniforms {
   nodeSpacing: number
   sizeMultiplier: number
+  renderModeSizing?: number
   screenHeight: number
   fov: number
   colorMode: ColorMode
@@ -147,6 +148,8 @@ export class TileMesh {
       u.uNodeSpacing!.value = uniforms.nodeSpacing
     if (uniforms.sizeMultiplier !== undefined)
       u.uSizeMultiplier!.value = uniforms.sizeMultiplier
+    if (uniforms.renderModeSizing !== undefined)
+      u.uRenderModeSizing!.value = uniforms.renderModeSizing
     if (uniforms.screenHeight !== undefined)
       u.uScreenHeight!.value = uniforms.screenHeight
     if (uniforms.fov !== undefined)
@@ -236,6 +239,7 @@ export class TileMesh {
       uniforms: {
         uNodeSpacing: { value: uniforms.nodeSpacing },
         uSizeMultiplier: { value: uniforms.sizeMultiplier },
+        uRenderModeSizing: { value: uniforms.renderModeSizing ?? 1.0 },
         uScreenHeight: { value: uniforms.screenHeight },
         uFov: { value: uniforms.fov },
         uColorMode: { value: uniforms.colorMode },

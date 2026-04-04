@@ -11,6 +11,8 @@ import { Slider } from '@/shared/components/ui/slider'
 import { formatMillions } from '../lib/format'
 import { COLOR_MODE_LABELS, ColorMode } from '../renderer/color-modes'
 import { PALETTE_LABELS, PaletteId } from '../renderer/palettes/palette-registry'
+import type { RenderModeId } from '../renderer/render-modes'
+import { RENDER_MODES } from '../renderer/render-modes'
 import { useViewerStore } from '../store'
 
 interface ToolbarProps {
@@ -37,6 +39,8 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
   high: 'High',
 }
 
+const RENDER_MODE_OPTIONS: RenderModeId[] = ['points', 'shaded', 'smooth', 'xray']
+
 const DPI_OPTIONS: DpiScale[] = [1, 1.5, 2, 'auto']
 
 const DPI_LABELS: Record<string, string> = {
@@ -47,6 +51,8 @@ const DPI_LABELS: Record<string, string> = {
 }
 
 export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
+  const renderMode = useViewerStore(s => s.renderMode)
+  const setRenderMode = useViewerStore(s => s.setRenderMode)
   const colorMode = useViewerStore(s => s.colorMode)
   const paletteId = useViewerStore(s => s.paletteId)
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
@@ -72,6 +78,23 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
 
   return (
     <div className="flex items-center gap-4 rounded-md bg-background/80 px-3 py-2 shadow-sm backdrop-blur-sm">
+      {/* Render mode */}
+      <div className="flex items-center gap-1">
+        {RENDER_MODE_OPTIONS.map(id => (
+          <Button
+            key={id}
+            variant={renderMode === id ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setRenderMode(id)}
+          >
+            {RENDER_MODES[id].label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
       {/* Color mode */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Color</span>

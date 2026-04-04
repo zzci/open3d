@@ -1,4 +1,5 @@
 import type { DatasetDescriptor } from './data/types'
+import type { RenderModeId } from './renderer/render-modes'
 import { create } from 'zustand'
 import { ColorMode } from './renderer/color-modes'
 import { PaletteId } from './renderer/palettes/palette-registry'
@@ -21,6 +22,7 @@ export type ExportPhase = 'counting' | 'writing' | 'finalizing'
 
 export interface ViewerState {
   // Render settings
+  renderMode: RenderModeId
   colorMode: ColorMode
   sizeMultiplier: number
   pointBudget: number
@@ -76,6 +78,7 @@ export interface ViewerState {
 }
 
 export interface ViewerActions {
+  setRenderMode: (mode: RenderModeId) => void
   setColorMode: (mode: ColorMode) => void
   setIntensityNormMode: (mode: IntensityNormMode) => void
   setPaletteId: (id: PaletteId) => void
@@ -112,6 +115,7 @@ const POINT_BUDGETS: Record<QualityPreset, number> = {
 }
 
 const initialState: ViewerState = {
+  renderMode: 'shaded' as RenderModeId,
   colorMode: ColorMode.RGB,
   intensityNormMode: 'linear' as IntensityNormMode,
   paletteId: PaletteId.Viridis,
@@ -150,6 +154,8 @@ const initialState: ViewerState = {
 
 export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   ...initialState,
+
+  setRenderMode: mode => set({ renderMode: mode }),
 
   setColorMode: mode => set({ colorMode: mode }),
 

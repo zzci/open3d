@@ -12,7 +12,8 @@ attribute float aSelected;    // 1.0 = selected, 0.0 = not
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform float uNodeSpacing;    // meters — spatial extent per point at this LOD level
-uniform float uSizeMultiplier; // user override (0.5–3.0, default 1.0)
+uniform float uSizeMultiplier;     // user override (0.5–3.0, default 1.0)
+uniform float uRenderModeSizing;   // render mode sizing factor (0.5–1.5, default 1.0)
 uniform float uScreenHeight;   // viewport height in pixels
 uniform float uFov;            // vertical FOV in radians
 uniform int uColorMode;
@@ -34,7 +35,7 @@ void main() {
 
   // Adaptive point sizing: project node spacing into screen pixels
   float projFactor = uScreenHeight / (2.0 * tan(uFov * 0.5));
-  float size = uNodeSpacing * projFactor / (-mvPosition.z) * uSizeMultiplier;
+  float size = uNodeSpacing * projFactor / (-mvPosition.z) * uSizeMultiplier * uRenderModeSizing;
 
   // Selected points are 1.5× larger
   if (uSelectionActive == 1 && aSelected > 0.5) {
