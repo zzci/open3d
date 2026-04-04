@@ -3,7 +3,7 @@
 - **status**: draft
 - **createdAt**: 2026-04-04 05:00
 - **approvedAt**: (pending)
-- **relatedTask**: FEAT-015 ~ FEAT-022
+- **relatedTask**: FEAT-015 ~ FEAT-023
 
 ## Context
 
@@ -195,6 +195,81 @@ FEAT-021 (High-DPI + MSAA) ←── depends on FEAT-015 FBO setup
 | 3D Gaussian Splatting | Photorealistic | 10-50× slower, needs pre-training, not suitable for editing workflow | Rejected for now — revisit for future "preview mode" |
 | Paraboloid splatting | Better hole filling | Requires normal estimation per point, adds CPU cost | Deferred — consider after EDL + adaptive sizing |
 | WebGPU compute for EDL | Faster | Browser support limited | Deferred — WebGL2 first, WebGPU upgrade path later |
+
+## Rendering Mode System (FEAT-023)
+
+The user selects a **rendering mode** (visualization intent) and a **quality level** (performance budget). These are orthogonal — any mode can run at any quality level.
+
+### Rendering Modes
+
+| Mode | Intent | Point shape | Edge | EDL | Sizing | Blend | Use case |
+|------|--------|------------|------|-----|--------|-------|----------|
+| **Points** | See raw scan density, gaps, noise | Hard circle | Discard | Off | Fixed uniform | Opaque | Data inspection, QA, noise review |
+| **Shaded** | Structural depth, surface form | Hard circle | Discard | On | Adaptive (octree spacing) | Opaque | General navigation, editing |
+| **Smooth** | Surface-like appearance | Gaussian splat | Alpha falloff | On | Adaptive × 1.5 | Alpha blend | Presentation, client review |
+| **X-Ray** | See-through overlapping layers | Hard circle | Discard | Off | Fixed small | Additive | Interior inspection, pipe routing |
+
+### Mode × Quality Matrix
+
+Each quality level adjusts the performance parameters independently of the rendering mode:
+
+```
+              Performance    Balanced       Quality        Ultra
+Points        budget 2M      budget 5M      budget 8M      budget 10M
+              DPI 1x         DPI 1.5x       DPI 2x         DPI native
+              SSAO off       SSAO off       SSAO off       SSAO off
+
+Shaded        budget 2M      budget 5M      budget 8M      budget 10M
+              DPI 1x         DPI 1.5x       DPI 2x         DPI native
+              SSAO off       SSAO off       SSAO 16s       SSAO 32s
+              EDL r=1        EDL r=2        EDL r=3        EDL r=4
+
+Smooth        budget 2M      budget 5M      budget 8M      budget 10M
+              DPI 1x         DPI 1.5x       DPI 2x         DPI native
+              SSAO off       SSAO 8s        SSAO 16s       SSAO 32s
+              EDL r=2        EDL r=3        EDL r=4        EDL r=5
+              alpha blend    alpha blend    alpha blend    alpha blend
+
+X-Ray         budget 2M      budget 5M      budget 8M      budget 10M
+              DPI 1x         DPI 1.5x       DPI 2x         DPI native
+              additive       additive       additive       additive
+```
+
+### Mode implementation
+
+Each mode is a configuration object that controls:
+
+```typescript
+interface RenderMode {
+  id: 'points' | 'shaded' | 'smooth' | 'xray'
+  label: string
+  pointShape: 'circle' | 'gaussian'    // hard discard vs alpha falloff
+  edlEnabled: boolean
+  adaptiveSizing: boolean               // octree-based vs fixed
+  sizingMultiplier: number              // 1.0 normal, 1.5 for smooth
+  blendMode: 'opaque' | 'alpha' | 'additive'
+  ssaoEnabled: boolean                  // per quality level override
+  depthWrite: boolean                   // false for additive/alpha
+}
+```
+
+### UI
+
+Mode selector: 4 icon-buttons in the toolbar (similar to quality presets but visually distinct). Quality selector stays separate.
+
+```
+[Points] [Shaded] [Smooth] [X-Ray]  |  [Low] [Med] [High] [Ultra]
+```
+
+Each mode switch is instant (uniform + blend state change, no geometry rebuild).
+
+### Color mode interaction
+
+Rendering mode and color mode are independent:
+- Rendering mode controls **how points look** (shape, lighting, blending)
+- Color mode controls **what color** (RGB, intensity, height, classification, palette)
+
+Any color mode works with any rendering mode. Example: X-Ray + Height gradient shows structural layers colored by elevation.
 
 ## Annotations
 

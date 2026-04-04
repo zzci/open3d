@@ -55,3 +55,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [ ] [**FEAT-020 Intensity normalization**](FEAT-020.md) `P2`
 - [ ] [**FEAT-021 High-DPI rendering and MSAA**](FEAT-021.md) `P2`
 - [ ] [**FEAT-022 Screen-space ambient occlusion (SSAO)**](FEAT-022.md) `P2`
+- [ ] [**FEAT-023 Rendering mode system (Points/Shaded/Smooth/X-Ray)**](FEAT-023.md) `P1`
