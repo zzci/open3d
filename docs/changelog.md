@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-04 06:00 [progress]
+
+PLAN-004 complete — production-quality point cloud rendering:
+- Phase A: EDL multi-pass pipeline, adaptive octree-spacing sizing, Gaussian alpha falloff
+- Phase B: 6 color palettes (viridis/turbo/inferno/plasma/cividis/grayscale), 10 color modes, histogram equalization
+- Phase C: High-DPI + MSAA, SSAO with blur
+- 4 rendering modes: Points (raw QA), Shaded (default), Smooth (presentation), X-Ray (see-through)
+- Mode × Quality matrix: Performance / Balanced / Quality / Ultra
+
 ## 2026-04-04 04:30 [BUG-P1]
 
 Fixed all repository audit findings:
