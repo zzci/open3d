@@ -1,8 +1,8 @@
 # FEAT-008 LAS/LAZ header parsing and decompression
 
-- **status**: pending
+- **status**: in-progress
 - **priority**: P2
-- **owner**: (unassigned)
+- **owner**: roy
 - **createdAt**: 2026-04-04 01:30
 
 ## Description
