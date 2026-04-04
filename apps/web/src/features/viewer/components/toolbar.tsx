@@ -1,4 +1,4 @@
-import type { QualityPreset, SsaoSampleCount } from '../store'
+import type { DpiScale, QualityPreset } from '../store'
 import { Button } from '@/shared/components/ui/button'
 import {
   Select,
@@ -37,6 +37,15 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
   high: 'High',
 }
 
+const DPI_OPTIONS: DpiScale[] = [1, 1.5, 2, 'auto']
+
+const DPI_LABELS: Record<string, string> = {
+  1: '1x',
+  1.5: '1.5x',
+  2: '2x',
+  auto: 'Auto',
+}
+
 export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
   const paletteId = useViewerStore(s => s.paletteId)
@@ -50,18 +59,12 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
   const setSizeMultiplier = useViewerStore(s => s.setSizeMultiplier)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
   const setQualityPreset = useViewerStore(s => s.setQualityPreset)
+  const dpiScale = useViewerStore(s => s.dpiScale)
+  const setDpiScale = useViewerStore(s => s.setDpiScale)
   const edlEnabled = useViewerStore(s => s.edlEnabled)
   const edlStrength = useViewerStore(s => s.edlStrength)
   const setEdlEnabled = useViewerStore(s => s.setEdlEnabled)
   const setEdlStrength = useViewerStore(s => s.setEdlStrength)
-  const ssaoEnabled = useViewerStore(s => s.ssaoEnabled)
-  const ssaoRadius = useViewerStore(s => s.ssaoRadius)
-  const ssaoIntensity = useViewerStore(s => s.ssaoIntensity)
-  const ssaoSamples = useViewerStore(s => s.ssaoSamples)
-  const setSsaoEnabled = useViewerStore(s => s.setSsaoEnabled)
-  const setSsaoRadius = useViewerStore(s => s.setSsaoRadius)
-  const setSsaoIntensity = useViewerStore(s => s.setSsaoIntensity)
-  const setSsaoSamples = useViewerStore(s => s.setSsaoSamples)
   const selectionMode = useViewerStore(s => s.selectionMode)
   const setSelectionMode = useViewerStore(s => s.setSelectionMode)
   const selectedPointCount = useViewerStore(s => s.selectedPointCount)
@@ -170,6 +173,24 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
 
       <div className="h-4 w-px bg-border" />
 
+      {/* DPI scale */}
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-muted-foreground">DPI</span>
+        {DPI_OPTIONS.map(scale => (
+          <Button
+            key={String(scale)}
+            variant={dpiScale === scale ? 'default' : 'ghost'}
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => setDpiScale(scale)}
+          >
+            {DPI_LABELS[String(scale)]}
+          </Button>
+        ))}
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
       {/* EDL (Eye-Dome Lighting) */}
       <div className="flex items-center gap-2">
         <Button
@@ -196,59 +217,6 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
             <span className="w-6 text-right text-xs tabular-nums">
               {Math.round(edlStrength * 100)}
             </span>
-          </>
-        )}
-      </div>
-
-      {/* SSAO (Screen-Space Ambient Occlusion) */}
-      <div className="flex items-center gap-2">
-        <Button
-          variant={ssaoEnabled ? 'default' : 'ghost'}
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={() => setSsaoEnabled(!ssaoEnabled)}
-        >
-          SSAO
-        </Button>
-        {ssaoEnabled && (
-          <>
-            <span className="text-xs text-muted-foreground">R</span>
-            <Slider
-              min={0.1}
-              max={2}
-              step={0.1}
-              value={[ssaoRadius]}
-              onValueChange={([v]) => {
-                if (v !== undefined)
-                  setSsaoRadius(v)
-              }}
-              className="w-14"
-            />
-            <span className="text-xs text-muted-foreground">I</span>
-            <Slider
-              min={0}
-              max={1}
-              step={0.05}
-              value={[ssaoIntensity]}
-              onValueChange={([v]) => {
-                if (v !== undefined)
-                  setSsaoIntensity(v)
-              }}
-              className="w-14"
-            />
-            <Select
-              value={String(ssaoSamples)}
-              onValueChange={v => setSsaoSamples(Number(v) as SsaoSampleCount)}
-            >
-              <SelectTrigger className="h-7 w-[60px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="8">8</SelectItem>
-                <SelectItem value="16">16</SelectItem>
-                <SelectItem value="32">32</SelectItem>
-              </SelectContent>
-            </Select>
           </>
         )}
       </div>

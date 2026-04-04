@@ -7,6 +7,12 @@ export function StatusBar() {
   const fps = useViewerStore(s => s.fps)
   const datasetInfo = useViewerStore(s => s.datasetInfo)
   const selectedPointCount = useViewerStore(s => s.selectedPointCount)
+  const dpiScale = useViewerStore(s => s.dpiScale)
+  const dpiAutoDownscaled = useViewerStore(s => s.dpiAutoDownscaled)
+
+  const dpiLabel = dpiScale === 'auto'
+    ? `Auto (${Math.min(window.devicePixelRatio, 2).toFixed(1)}x)`
+    : `${dpiScale}x`
 
   return (
     <div className="flex items-center gap-4 rounded-md bg-background/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
@@ -47,6 +53,16 @@ export function StatusBar() {
         {' '}
         FPS
       </span>
+      <span className="tabular-nums">
+        DPI
+        {' '}
+        {dpiAutoDownscaled ? '1x' : dpiLabel}
+      </span>
+      {dpiAutoDownscaled && (
+        <span className="text-amber-400">
+          downscaled (low FPS)
+        </span>
+      )}
     </div>
   )
 }
