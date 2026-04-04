@@ -239,7 +239,8 @@ function ViewerPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = fileName?.replace('.las', '_edited.las') || 'edited.las'
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      a.download = fileName?.replace(/\.las$/i, `_${ts}.las`) || `edited_${ts}.las`
       a.click()
       URL.revokeObjectURL(url)
       showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
