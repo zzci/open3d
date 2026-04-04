@@ -279,16 +279,38 @@ function ViewerPage() {
         setProgress(pct)
         setLoadText(`Saving... ${(pct * 100) | 0}%`)
       })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      // Strip any existing timestamp suffix to prevent accumulation
       const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
-      a.download = `${baseName}_${ts}.las`
-      a.click()
-      URL.revokeObjectURL(url)
-      showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+      const suggestedName = `${baseName}_${ts}.las`
+
+      // Try File System Access API (Chromium) — lets user pick folder
+      if ('showSaveFilePicker' in window) {
+        try {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'LAS Point Cloud', accept: { 'application/octet-stream': ['.las'] } }],
+          })
+          const writable = await handle.createWritable()
+          await writable.write(blob)
+          await writable.close()
+          showToast(`Saved ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+        }
+        catch (err: unknown) {
+          // User cancelled the picker
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          throw err
+        }
+      }
+      else {
+        // Fallback: auto-download
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = suggestedName
+        a.click()
+        URL.revokeObjectURL(url)
+        showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+      }
     }
     catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Save failed', 'error')
