@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-04 02:10 [progress]
+
+All 4 phases complete (FEAT-001 through FEAT-013 merged to main). Review cron deleted.
+
 ## 2026-04-04 03:00 [progress]
 
 FEAT-013: Streaming local export. Two-pass Export Worker reads source LAS file sequentially — pass 1 counts surviving points and computes bounds, pass 2 writes LAS 1.4 header + filtered points in 1 MB chunks to OPFS temp file. ExportSession orchestrates worker lifecycle with File System Access API save picker (blob URL fallback for Firefox/Safari). Cancellation via worker message. Export dialog shows phase, progress bar, point count, bytes written. Toolbar Export LAS button (disabled when no dataset). Zustand store extended with export state slice. Temporary EditLogEntry types for FEAT-012 integration.
