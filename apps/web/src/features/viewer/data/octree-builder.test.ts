@@ -10,10 +10,20 @@ import {
   FLAG_HAS_COLOR,
   FLAG_HAS_INTENSITY,
 } from './octree-builder'
+import type { TileAttributes } from './octree-builder'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function makeAttrs(
+  positions: Float32Array,
+  colors: Uint8Array | undefined,
+  intensity: Float32Array,
+  classification: Uint8Array,
+): TileAttributes {
+  return { positions, colors, intensity, classification }
+}
 
 /**
  * Generate N points uniformly distributed in [0, size)^3.
@@ -289,7 +299,7 @@ describe('tile binary encoding/decoding', () => {
     const classification = new Uint8Array([2, 6, 3])
     const indices = new Uint32Array([0, 1, 2])
 
-    const buffer = encodeTileBinary(indices, 0, 3, 1, positions, undefined, intensity, classification)
+    const buffer = encodeTileBinary(indices, 0, 3, 1, makeAttrs(positions, undefined, intensity, classification))
     const decoded = decodeTileBinary(buffer)
 
     expect(decoded.pointCount).toBe(3)
@@ -311,7 +321,7 @@ describe('tile binary encoding/decoding', () => {
     const classification = new Uint8Array([9])
     const indices = new Uint32Array([0])
 
-    const buffer = encodeTileBinary(indices, 0, 1, 1, positions, colors, intensity, classification)
+    const buffer = encodeTileBinary(indices, 0, 1, 1, makeAttrs(positions, colors, intensity, classification))
     const decoded = decodeTileBinary(buffer)
 
     expect(decoded.pointCount).toBe(1)
@@ -341,7 +351,7 @@ describe('tile binary encoding/decoding', () => {
     }
 
     // Stride of 3: should pick indices 0, 3, 6, 9 = 4 points
-    const buffer = encodeTileBinary(indices, 0, 10, 3, positions, undefined, intensity, classification)
+    const buffer = encodeTileBinary(indices, 0, 10, 3, makeAttrs(positions, undefined, intensity, classification))
     const decoded = decodeTileBinary(buffer)
 
     expect(decoded.pointCount).toBe(4)
@@ -358,7 +368,7 @@ describe('tile binary encoding/decoding', () => {
     const indices = new Uint32Array([2, 0, 1]) // reordered
 
     // Encode only index range [1, 3) = indices[1] and indices[2]
-    const buffer = encodeTileBinary(indices, 1, 3, 1, positions, undefined, intensity, classification)
+    const buffer = encodeTileBinary(indices, 1, 3, 1, makeAttrs(positions, undefined, intensity, classification))
     const decoded = decodeTileBinary(buffer)
 
     expect(decoded.pointCount).toBe(2)
@@ -379,14 +389,14 @@ describe('tile binary encoding/decoding', () => {
     const classification = new Uint8Array([2])
     const indices = new Uint32Array([0])
 
-    const withColor = encodeTileBinary(indices, 0, 1, 1, positions, colors, intensity, classification)
+    const withColor = encodeTileBinary(indices, 0, 1, 1, makeAttrs(positions, colors, intensity, classification))
     const withColorView = new DataView(withColor)
     const flagsWithColor = withColorView.getUint32(4, true)
     expect(flagsWithColor & FLAG_HAS_COLOR).toBeTruthy()
     expect(flagsWithColor & FLAG_HAS_INTENSITY).toBeTruthy()
     expect(flagsWithColor & FLAG_HAS_CLASSIFICATION).toBeTruthy()
 
-    const noColor = encodeTileBinary(indices, 0, 1, 1, positions, undefined, intensity, classification)
+    const noColor = encodeTileBinary(indices, 0, 1, 1, makeAttrs(positions, undefined, intensity, classification))
     const noColorView = new DataView(noColor)
     const flagsNoColor = noColorView.getUint32(4, true)
     expect(flagsNoColor & FLAG_HAS_COLOR).toBeFalsy()
@@ -504,10 +514,7 @@ describe('octree integration', () => {
       leaf!.indexStart,
       leaf!.indexEnd,
       1,
-      data.positions,
-      data.colors,
-      data.intensity,
-      data.classification,
+      makeAttrs(data.positions, data.colors, data.intensity, data.classification),
     )
 
     const decoded = decodeTileBinary(buffer)

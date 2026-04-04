@@ -52,6 +52,7 @@ const POINT_RECORD_BASE_SIZES: Record<number, number> = {
   3: 34,
   6: 30,
   7: 36,
+  8: 38,
 }
 
 // ---------------------------------------------------------------------------
@@ -226,11 +227,18 @@ interface DecodedPoint {
   z: number
   intensity: number
   returnNumber: number
+  numberOfReturns: number
   classification: number
+  scanAngle: number
+  userData: number
+  pointSourceId: number
+  classificationFlags: number
+  scannerChannel: number
   gpsTime?: number
   red?: number
   green?: number
   blue?: number
+  nir?: number
 }
 
 function decodePointRecord(
@@ -240,8 +248,6 @@ function decodePointRecord(
   scale: [number, number, number],
   fileOffset: [number, number, number],
 ): DecodedPoint {
-  // Formats 0-3: legacy (LAS 1.2-1.3)
-  // Formats 6-7: LAS 1.4
   const xi = view.getInt32(offset, true)
   const yi = view.getInt32(offset + 4, true)
   const zi = view.getInt32(offset + 8, true)
@@ -253,17 +259,33 @@ function decodePointRecord(
   const intensity = view.getUint16(offset + 12, true)
 
   let returnNumber: number
+  let numberOfReturns: number
   let classification: number
+  let scanAngle: number
+  let userData: number
+  let pointSourceId: number
+  let classificationFlags = 0
+  let scannerChannel = 0
   let gpsTime: number | undefined
   let red: number | undefined
   let green: number | undefined
   let blue: number | undefined
+  let nir: number | undefined
 
   if (format <= 5) {
-    // Legacy formats 0-3
+    // Legacy formats 0-5 (LAS 1.2-1.3)
+    // Byte 14: Return Number (bits 0-2), Number of Returns (bits 3-5),
+    //          Scan Direction Flag (bit 6), Edge of Flight Line (bit 7)
     const flagByte = view.getUint8(offset + 14)
     returnNumber = flagByte & 0x07
+    numberOfReturns = (flagByte >> 3) & 0x07
     classification = view.getUint8(offset + 15)
+    // Byte 16: Scan Angle Rank (Int8, -90 to +90 degrees)
+    scanAngle = view.getInt8(offset + 16)
+    // Byte 17: User Data
+    userData = view.getUint8(offset + 17)
+    // Bytes 18-19: Point Source ID
+    pointSourceId = view.getUint16(offset + 18, true)
 
     switch (format) {
       case 1:
@@ -283,20 +305,41 @@ function decodePointRecord(
     }
   }
   else {
-    // LAS 1.4 formats 6-7
+    // LAS 1.4 formats 6-8
+    // Byte 14: Return Number (bits 0-3), Number of Returns (bits 4-7)
     const flagByte = view.getUint8(offset + 14)
     returnNumber = flagByte & 0x0F
+    numberOfReturns = (flagByte >> 4) & 0x0F
+    // Byte 15: Classification Flags (bits 0-3), Scanner Channel (bits 4-5),
+    //          Scan Direction Flag (bit 6), Edge of Flight Line (bit 7)
+    const flagByte2 = view.getUint8(offset + 15)
+    classificationFlags = flagByte2 & 0x0F
+    scannerChannel = (flagByte2 >> 4) & 0x03
     classification = view.getUint8(offset + 16)
+    // Byte 17: User Data
+    userData = view.getUint8(offset + 17)
+    // Bytes 18-19: Scan Angle (Int16, scaled by 0.006 degrees)
+    scanAngle = view.getInt16(offset + 18, true) * 0.006
+    // Bytes 20-21: Point Source ID
+    pointSourceId = view.getUint16(offset + 20, true)
     gpsTime = view.getFloat64(offset + 22, true)
 
-    if (format === 7) {
+    if (format >= 7) {
       red = view.getUint16(offset + 30, true)
       green = view.getUint16(offset + 32, true)
       blue = view.getUint16(offset + 34, true)
     }
+
+    if (format >= 8) {
+      nir = view.getUint16(offset + 36, true)
+    }
   }
 
-  return { x, y, z, intensity, returnNumber, classification, gpsTime, red, green, blue }
+  return {
+    x, y, z, intensity, returnNumber, numberOfReturns, classification,
+    scanAngle, userData, pointSourceId, classificationFlags, scannerChannel,
+    gpsTime, red, green, blue, nir,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +347,7 @@ function decodePointRecord(
 // ---------------------------------------------------------------------------
 
 function formatHasColor(format: number): boolean {
-  return format === 2 || format === 3 || format === 7
+  return format === 2 || format === 3 || format === 7 || format === 8
 }
 
 function getFormatAttributes(format: number): string[] {
@@ -321,12 +364,25 @@ function buildTileData(
   chunkIndex: number,
   hasColor: boolean,
   totalBounds: Bounds,
+  pointFormat: number,
 ): TileData {
   const count = points.length
   const positions = new Float32Array(count * 3)
   const colors = hasColor ? new Uint8Array(count * 3) : undefined
   const intensity = new Float32Array(count)
   const classification = new Uint8Array(count)
+  const returnNumber = new Uint8Array(count)
+  const numberOfReturns = new Uint8Array(count)
+  const scanAngle = new Float32Array(count)
+  const userData = new Uint8Array(count)
+  const pointSourceId = new Uint16Array(count)
+  const hasGpsTime = pointFormat === 1 || pointFormat === 3 || pointFormat >= 6
+  const gpsTime = hasGpsTime ? new Float64Array(count) : undefined
+  const hasNir = pointFormat === 8
+  const nirArray = hasNir ? new Uint16Array(count) : undefined
+  const hasFlags14 = pointFormat >= 6
+  const classificationFlags = hasFlags14 ? new Uint8Array(count) : undefined
+  const scannerChannel = hasFlags14 ? new Uint8Array(count) : undefined
 
   for (let i = 0; i < count; i++) {
     const p = points[i]!
@@ -337,12 +393,32 @@ function buildTileData(
     // Normalize intensity from 16-bit to 0-1
     intensity[i] = p.intensity / 65535
     classification[i] = p.classification
+    returnNumber[i] = p.returnNumber
+    numberOfReturns[i] = p.numberOfReturns
+    scanAngle[i] = p.scanAngle
+    userData[i] = p.userData
+    pointSourceId[i] = p.pointSourceId
+
+    if (gpsTime && p.gpsTime !== undefined) {
+      gpsTime[i] = p.gpsTime
+    }
 
     if (colors && p.red !== undefined && p.green !== undefined && p.blue !== undefined) {
       // LAS stores 16-bit color, scale to 8-bit
       colors[i * 3] = p.red >> 8
       colors[i * 3 + 1] = p.green >> 8
       colors[i * 3 + 2] = p.blue >> 8
+    }
+
+    if (nirArray && p.nir !== undefined) {
+      nirArray[i] = p.nir
+    }
+
+    if (classificationFlags) {
+      classificationFlags[i] = p.classificationFlags
+    }
+    if (scannerChannel) {
+      scannerChannel[i] = p.scannerChannel
     }
   }
 
@@ -355,6 +431,15 @@ function buildTileData(
     colors,
     intensity,
     classification,
+    returnNumber,
+    numberOfReturns,
+    scanAngle,
+    userData,
+    pointSourceId,
+    gpsTime,
+    nir: nirArray,
+    classificationFlags,
+    scannerChannel,
   }
 }
 
@@ -388,7 +473,7 @@ export async function* readLasChunks(
       )
     }
 
-    yield buildTileData(points, chunkIndex, hasColor, bounds)
+    yield buildTileData(points, chunkIndex, hasColor, bounds, pointFormat)
 
     filePos += batchBytes
     remaining -= batchCount
@@ -464,7 +549,7 @@ export async function* readLazChunks(
         )
       }
 
-      yield buildTileData(points, chunkIndex, hasColor, bounds)
+      yield buildTileData(points, chunkIndex, hasColor, bounds, pointFormat)
 
       remaining -= batchCount
       chunkIndex++

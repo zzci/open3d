@@ -90,6 +90,15 @@ export interface TileData {
   colors?: Uint8Array
   intensity?: Float32Array
   classification?: Uint8Array
+  returnNumber?: Uint8Array
+  numberOfReturns?: Uint8Array
+  scanAngle?: Float32Array
+  userData?: Uint8Array
+  pointSourceId?: Uint16Array
+  gpsTime?: Float64Array
+  nir?: Uint16Array
+  classificationFlags?: Uint8Array
+  scannerChannel?: Uint8Array
 }
 
 // --- Decode worker specific messages ---
