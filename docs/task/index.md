@@ -48,11 +48,11 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**AUDIT-001 Record repository audit report**](AUDIT-001.md) `P1`
 - [-] [**FEAT-014 Streaming multi-pass indexing for large LAS files**](FEAT-014.md) `P1`
 - [x] [**FEAT-015 Eye-Dome Lighting (EDL) multi-pass rendering**](FEAT-015.md) `P1`
-- [ ] [**FEAT-016 Adaptive point sizing from octree spacing**](FEAT-016.md) `P1`
+- [x] [**FEAT-016 Adaptive point sizing from octree spacing**](FEAT-016.md) `P1`
 - [x] [**FEAT-017 Smooth point edges with Gaussian alpha falloff**](FEAT-017.md) `P1`
-- [ ] [**FEAT-018 Production color palettes**](FEAT-018.md) `P1`
-- [ ] [**FEAT-019 Extended color modes**](FEAT-019.md) `P1`
-- [ ] [**FEAT-020 Intensity normalization**](FEAT-020.md) `P2`
-- [ ] [**FEAT-021 High-DPI rendering and MSAA**](FEAT-021.md) `P2`
-- [ ] [**FEAT-022 Screen-space ambient occlusion (SSAO)**](FEAT-022.md) `P2`
-- [ ] [**FEAT-023 Rendering mode system (Points/Shaded/Smooth/X-Ray)**](FEAT-023.md) `P1`
+- [x] [**FEAT-018 Production color palettes**](FEAT-018.md) `P1`
+- [x] [**FEAT-019 Extended color modes**](FEAT-019.md) `P1`
+- [x] [**FEAT-020 Intensity normalization**](FEAT-020.md) `P2`
+- [x] [**FEAT-021 High-DPI rendering and MSAA**](FEAT-021.md) `P2`
+- [x] [**FEAT-022 Screen-space ambient occlusion (SSAO)**](FEAT-022.md) `P2`
+- [x] [**FEAT-023 Rendering mode system (Points/Shaded/Smooth/X-Ray)**](FEAT-023.md) `P1`
