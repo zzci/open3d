@@ -5,6 +5,7 @@ attribute vec3 position;
 attribute vec3 aColor;        // RGB 0–1
 attribute float aIntensity;   // 0–1
 attribute float aClassification;
+attribute float aReturnNumber; // 0–based return index
 attribute float aSelected;    // 1.0 = selected, 0.0 = not
 
 // Uniforms
@@ -24,6 +25,7 @@ varying vec3 vColor;
 varying float vIntensity;
 varying float vClassification;
 varying float vHeightNorm;
+varying float vReturnNumber;
 varying float vSelected;
 
 void main() {
@@ -44,6 +46,7 @@ void main() {
   vColor = aColor;
   vIntensity = aIntensity;
   vClassification = aClassification;
+  vReturnNumber = aReturnNumber;
   vSelected = aSelected;
 
   // Normalized height for height gradient mode

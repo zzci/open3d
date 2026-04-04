@@ -9,6 +9,7 @@ varying vec3 vColor;
 varying float vIntensity;
 varying float vClassification;
 varying float vHeightNorm;
+varying float vReturnNumber;
 varying float vSelected;
 
 // Blue → Cyan → Green → Yellow → Red ramp
@@ -47,7 +48,7 @@ void main() {
     // RGB
     color = vColor;
   } else if (uColorMode == 1) {
-    // Intensity ramp
+    // Intensity heatmap
     color = heatmap(vIntensity);
   } else if (uColorMode == 2) {
     // Height gradient
@@ -56,8 +57,39 @@ void main() {
     // Classification palette via 1D texture lookup
     float u = (vClassification + 0.5) / 256.0;
     color = texture2D(uClassificationPalette, vec2(u, 0.5)).rgb;
+  } else if (uColorMode == 4) {
+    // White
+    color = vec3(1.0);
+  } else if (uColorMode == 5) {
+    // Grayscale intensity — direct brightness
+    color = vec3(vIntensity);
+  } else if (uColorMode == 6) {
+    // Intensity × Height — structural depth
+    color = heatmap(vHeightNorm) * vIntensity;
+  } else if (uColorMode == 7) {
+    // Return number — distinct color per return (up to 5 returns + fallback)
+    float rn = vReturnNumber;
+    if (rn < 0.5) {
+      color = vec3(0.26, 0.52, 0.96); // 1st return — blue
+    } else if (rn < 1.5) {
+      color = vec3(0.15, 0.68, 0.38); // 2nd return — green
+    } else if (rn < 2.5) {
+      color = vec3(0.98, 0.74, 0.02); // 3rd return — yellow
+    } else if (rn < 3.5) {
+      color = vec3(0.96, 0.42, 0.07); // 4th return — orange
+    } else if (rn < 4.5) {
+      color = vec3(0.85, 0.11, 0.38); // 5th return — red
+    } else {
+      color = vec3(0.62, 0.31, 0.87); // 6th+ return — purple
+    }
+  } else if (uColorMode == 8) {
+    // Palette on Intensity — fallback to heatmap until palette texture available
+    color = heatmap(vIntensity);
+  } else if (uColorMode == 9) {
+    // Palette on Height — fallback to heatmap until palette texture available
+    color = heatmap(vHeightNorm);
   } else {
-    // White (mode 4 and fallback)
+    // Fallback
     color = vec3(1.0);
   }
 
