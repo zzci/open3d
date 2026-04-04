@@ -303,101 +303,89 @@ function ViewerPage() {
       )}
       <div ref={rectRef} className="pointer-events-none absolute z-10 border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
 
-      {/* File opener overlay */}
-      {!fileName && !loading && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-neutral-100">
-          <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-neutral-300 p-12">
-            <h1 className="text-2xl font-bold text-neutral-700">Open3D Point Cloud Viewer</h1>
-            <p className="text-sm text-neutral-500">Drag & drop a .las file, or click to browse</p>
-            <label className="cursor-pointer rounded bg-neutral-800 px-6 py-2 text-sm text-white hover:bg-neutral-700">
-              Browse Files
-              <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
-            </label>
-          </div>
-        </div>
-      )}
-
       {/* Loading overlay */}
       {loading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80">
-          <div className="flex flex-col items-center gap-3">
-            <div className="text-lg font-medium">{loadText}</div>
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="flex flex-col items-center gap-3 rounded-lg bg-[#161b22] px-8 py-6 text-white shadow-lg">
+            <div className="text-sm">{loadText}</div>
             {progress > 0 && progress < 1 && (
-              <div className="h-2 w-64 overflow-hidden rounded-full bg-neutral-200">
-                <div className="h-full rounded-full bg-neutral-800 transition-[width]" style={{ width: `${progress * 100}%` }} />
+              <div className="h-1.5 w-48 overflow-hidden rounded-full bg-[#30363d]">
+                <div className="h-full rounded-full bg-[#58a6ff] transition-[width]" style={{ width: `${progress * 100}%` }} />
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Toolbar */}
-      {fileName && (
-        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-white/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-          <label className="cursor-pointer rounded bg-neutral-200 px-2 py-1 hover:bg-neutral-300">
-            {fileName}
-            <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
-          </label>
+      {/* Toolbar — always visible */}
+      <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm">
+        <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
+          {fileName || 'Open LAS'}
+          <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
+        </label>
 
-          <div className="h-4 w-px bg-neutral-300" />
+        {fileName && (
+          <>
+            <div className="h-4 w-px bg-[#30363d]" />
 
-          {/* View presets */}
-          {VIEWS.map(v => (
-            <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-neutral-800 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setViewPreset(v)}>
-              {v}
-            </button>
-          ))}
+            {/* View presets */}
+            {VIEWS.map(v => (
+              <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-[#58a6ff] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setViewPreset(v)}>
+                {v}
+              </button>
+            ))}
 
-          <div className="h-4 w-px bg-neutral-300" />
+            <div className="h-4 w-px bg-[#30363d]" />
 
-          {/* Nav/Select mode */}
-          <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-neutral-800 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setMode('navigate')}>Nav</button>
-          <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-blue-600 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setMode('select')}>Sel</button>
+            {/* Nav/Select mode */}
+            <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-[#30363d]' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('navigate')}>Nav</button>
+            <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-[#d63384] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('select')}>Sel</button>
 
-          <div className="h-4 w-px bg-neutral-300" />
+            <div className="h-4 w-px bg-[#30363d]" />
 
-          {/* Point size */}
-          <span className="text-neutral-500">Size</span>
-          <input type="range" min="0.1" max="5" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
-          <span className="tabular-nums text-neutral-500">{pointSize}</span>
+            {/* Point size */}
+            <span className="text-[#8b949e]">Size</span>
+            <input type="range" min="0.1" max="5" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
+            <span className="tabular-nums text-[#8b949e]">{pointSize}</span>
 
-          {/* Max points */}
-          <span className="text-neutral-500">Pts</span>
-          <select value={maxPoints} onChange={e => handleMaxPointsChange(Number(e.target.value))} className="rounded border px-1 py-0.5">
-            {MAX_PTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-          </select>
+            {/* Max points */}
+            <span className="text-[#8b949e]">Pts</span>
+            <select value={maxPoints} onChange={e => handleMaxPointsChange(Number(e.target.value))} className="rounded border border-[#30363d] bg-[#21262d] px-1 py-0.5 text-[#c9d1d9]">
+              {MAX_PTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
 
-          {/* Color mode */}
-          <select value={colorMode} onChange={e => setColorMode(e.target.value)} className="rounded border px-1 py-0.5">
-            {COLOR_MODES.map(m => <option key={m.v} value={m.v}>{data?.isGrayscale && m.v === 'rgb' ? 'Intensity' : m.l}</option>)}
-          </select>
+            {/* Color mode */}
+            <select value={colorMode} onChange={e => setColorMode(e.target.value)} className="rounded border border-[#30363d] bg-[#21262d] px-1 py-0.5 text-[#c9d1d9]">
+              {COLOR_MODES.map(m => <option key={m.v} value={m.v}>{data?.isGrayscale && m.v === 'rgb' ? 'Intensity' : m.l}</option>)}
+            </select>
 
-          <div className="flex-1" />
+            <div className="flex-1" />
 
-          {/* Selection actions */}
-          {hasSelection && (
-            <>
-              <span className="text-orange-500">~{selectedCount.toLocaleString()}</span>
-              <button className="rounded bg-red-600 px-2 py-0.5 text-white" onClick={() => handleDelete(false)}>Delete</button>
-              <button className="rounded bg-green-600 px-2 py-0.5 text-white" onClick={() => handleDelete(true)}>Keep</button>
-              <button className="rounded bg-neutral-200 px-2 py-0.5" onClick={clearSelection}>Esc</button>
-            </>
-          )}
+            {/* Selection actions */}
+            {hasSelection && (
+              <>
+                <span className="text-[#ff9944]">~{selectedCount.toLocaleString()}</span>
+                <button className="rounded bg-[#f85149] px-2 py-0.5 text-white" onClick={() => handleDelete(false)}>Delete</button>
+                <button className="rounded bg-[#3fb950] px-2 py-0.5 text-white" onClick={() => handleDelete(true)}>Keep</button>
+                <button className="rounded bg-[#30363d] px-2 py-0.5" onClick={clearSelection}>Esc</button>
+              </>
+            )}
 
-          {/* Edit actions */}
-          {editCount > 0 && <span className="text-yellow-500">{editCount} edit{editCount > 1 ? 's' : ''}</span>}
-          <button className="rounded bg-neutral-200 px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>Undo</button>
-          <button className="rounded bg-blue-600 px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>Save</button>
-        </div>
-      )}
+            {/* Edit actions */}
+            {editCount > 0 && <span className="text-[#ffcc44]">{editCount} edit{editCount > 1 ? 's' : ''}</span>}
+            <button className="rounded bg-[#21262d] px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>Undo</button>
+            <button className="rounded bg-[#58a6ff] px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>Save</button>
+          </>
+        )}
+      </div>
 
       {/* Status bar */}
       {fileName && (
-        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-3 rounded-lg bg-white/90 px-4 py-1.5 text-xs text-neutral-600 shadow-sm backdrop-blur-sm">
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-3 rounded-lg bg-[#161b22]/90 px-4 py-1.5 text-xs text-[#8b949e] shadow-sm backdrop-blur-sm">
           <span>{fileName}</span>
           <span>Total: {totalPoints.toLocaleString()}</span>
           <span>Display: {data?.count.toLocaleString() || '-'}</span>
-          {editCount > 0 && <span className="text-yellow-500">Unsaved: {editCount}</span>}
+          {editCount > 0 && <span className="text-[#ffcc44]">Unsaved: {editCount}</span>}
         </div>
       )}
 
