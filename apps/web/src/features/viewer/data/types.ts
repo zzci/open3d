@@ -91,6 +91,22 @@ export interface TileData {
   classification?: Uint8Array
 }
 
+// --- Decode worker specific messages ---
+
+export interface DecodeTilePayload {
+  file: File
+  nodeId: string
+  level: number
+  byteOffset: number
+  byteSize: number
+  pointCount: number
+  bounds: Bounds
+  pointFormat: number
+  pointRecordLength: number
+  scale: [number, number, number]
+  offset: [number, number, number]
+}
+
 export const POINT_FORMAT_ATTRIBUTES: Record<number, string[]> = {
   0: ['x', 'y', 'z', 'intensity', 'return_number', 'classification'],
   1: ['x', 'y', 'z', 'intensity', 'return_number', 'classification', 'gps_time'],

@@ -1,8 +1,8 @@
 # FEAT-004 Tile decode Worker
 
-- **status**: pending
+- **status**: done
 - **priority**: P1
-- **owner**: (unassigned)
+- **owner**: roy
 - **createdAt**: 2026-04-04 01:30
 
 ## Description
