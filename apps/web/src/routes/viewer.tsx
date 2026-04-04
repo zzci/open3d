@@ -48,7 +48,7 @@ function ViewerPage() {
   const [loadText, setLoadText] = useState('')
   const [progress, setProgress] = useState(0)
   const [toast, setToast] = useState<{ msg: string, type: string } | null>(null)
-  const [pointSize, setPointSize] = useState(1.0)
+  const [pointSize, setPointSize] = useState(1)
   const [maxPoints, setMaxPoints] = useState(0) // 0 = all points, no downsampling
   const [colorMode, setColorMode] = useState('rgb')
   const [viewPreset, setViewPreset] = useState<string | null>('persp')
@@ -357,8 +357,8 @@ function ViewerPage() {
 
           {/* Point size */}
           <span className="text-neutral-500">Size</span>
-          <input type="range" min="0.2" max="3" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
-          <span className="tabular-nums text-neutral-500">{pointSize}x</span>
+          <input type="range" min="1" max="8" step="1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
+          <span className="tabular-nums text-neutral-500">{pointSize}px</span>
 
           {/* Max points */}
           <span className="text-neutral-500">Pts</span>
