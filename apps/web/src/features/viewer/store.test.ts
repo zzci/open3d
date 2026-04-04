@@ -14,7 +14,7 @@ describe('useViewerStore', () => {
     it('has default render settings', () => {
       const state = useViewerStore.getState()
       expect(state.colorMode).toBe(ColorMode.RGB)
-      expect(state.pointSize).toBe(2)
+      expect(state.sizeMultiplier).toBe(1.0)
       expect(state.pointBudget).toBe(4_000_000)
       expect(state.qualityPreset).toBe('medium')
     })
@@ -35,10 +35,10 @@ describe('useViewerStore', () => {
     })
   })
 
-  describe('setPointSize', () => {
-    it('updates point size', () => {
-      useViewerStore.getState().setPointSize(5)
-      expect(useViewerStore.getState().pointSize).toBe(5)
+  describe('setSizeMultiplier', () => {
+    it('updates size multiplier', () => {
+      useViewerStore.getState().setSizeMultiplier(2.5)
+      expect(useViewerStore.getState().sizeMultiplier).toBe(2.5)
     })
   })
 
@@ -130,13 +130,13 @@ describe('useViewerStore', () => {
   describe('reset', () => {
     it('resets to initial state', () => {
       useViewerStore.getState().setColorMode(ColorMode.Height)
-      useViewerStore.getState().setPointSize(8)
+      useViewerStore.getState().setSizeMultiplier(2.5)
       useViewerStore.getState().setLoading(true, 'test')
       useViewerStore.getState().reset()
 
       const state = useViewerStore.getState()
       expect(state.colorMode).toBe(ColorMode.RGB)
-      expect(state.pointSize).toBe(2)
+      expect(state.sizeMultiplier).toBe(1.0)
       expect(state.isLoading).toBe(false)
       expect(state.datasetInfo).toBeNull()
     })

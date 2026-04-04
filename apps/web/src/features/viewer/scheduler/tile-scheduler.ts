@@ -1,4 +1,4 @@
-import type { DecodeTilePayload, OctreeNode, TileData } from '../data/types'
+import type { Bounds, DecodeTilePayload, OctreeNode, TileData } from '../data/types'
 import type { LodPolicyConfig } from './lod-policy'
 import type { ViewState } from './view-state'
 import { getChildIds } from '../data/hierarchy'
@@ -87,6 +87,7 @@ export class TileScheduler {
   private readonly decode: DecodeDispatcher
   private readonly callbacks: SchedulerCallbacks
   private readonly datasetMeta: DatasetMeta
+  private readonly rootSpacing: number
   private config: TileSchedulerConfig
   private disposed = false
 
@@ -102,6 +103,10 @@ export class TileScheduler {
     this.callbacks = callbacks
     this.datasetMeta = datasetMeta
     this.config = { ...DEFAULT_CONFIG, ...config }
+
+    // Compute root spacing from root node bounds diagonal
+    const root = hierarchy.get('0-0-0-0')
+    this.rootSpacing = root ? boundsDiagonal(root.bounds) : 1.0
   }
 
   // -----------------------------------------------------------------------
@@ -325,6 +330,9 @@ export class TileScheduler {
         if (!tile || tile.status === 'evicted')
           return
 
+        // Stamp adaptive spacing: rootSpacing / 2^level
+        data.spacing = this.rootSpacing / 2 ** node.level
+
         tile.status = 'loaded'
         tile.data = data
         this.callbacks.onTileLoaded(id, data)
@@ -346,4 +354,12 @@ export interface DatasetMeta {
   pointRecordLength: number
   scale: [number, number, number]
   offset: [number, number, number]
+}
+
+/** Compute the 3D diagonal length of a bounding box */
+function boundsDiagonal(b: Bounds): number {
+  const dx = b.max[0] - b.min[0]
+  const dy = b.max[1] - b.min[1]
+  const dz = b.max[2] - b.min[2]
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
 }

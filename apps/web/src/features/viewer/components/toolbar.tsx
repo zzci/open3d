@@ -36,13 +36,13 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
 
 export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
-  const pointSize = useViewerStore(s => s.pointSize)
+  const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const pointBudget = useViewerStore(s => s.pointBudget)
   const qualityPreset = useViewerStore(s => s.qualityPreset)
   const descriptor = useViewerStore(s => s.descriptor)
   const isExporting = useViewerStore(s => s.isExporting)
   const setColorMode = useViewerStore(s => s.setColorMode)
-  const setPointSize = useViewerStore(s => s.setPointSize)
+  const setSizeMultiplier = useViewerStore(s => s.setSizeMultiplier)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
   const setQualityPreset = useViewerStore(s => s.setQualityPreset)
   const edlEnabled = useViewerStore(s => s.edlEnabled)
@@ -78,21 +78,21 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
 
       <div className="h-4 w-px bg-border" />
 
-      {/* Point size */}
+      {/* Size multiplier */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Size</span>
         <Slider
-          min={1}
-          max={10}
-          step={0.5}
-          value={[pointSize]}
+          min={0.5}
+          max={3}
+          step={0.1}
+          value={[sizeMultiplier]}
           onValueChange={([v]) => {
             if (v !== undefined)
-              setPointSize(v)
+              setSizeMultiplier(v)
           }}
           className="w-20"
         />
-        <span className="w-6 text-right text-xs tabular-nums">{pointSize}</span>
+        <span className="w-8 text-right text-xs tabular-nums">{sizeMultiplier.toFixed(1)}</span>
       </div>
 
       <div className="h-4 w-px bg-border" />

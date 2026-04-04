@@ -1,5 +1,4 @@
 import type { DatasetDescriptor } from './data/types'
-import type { BlendMode, PointShape } from './renderer/tile-mesh'
 import { create } from 'zustand'
 import { ColorMode } from './renderer/color-modes'
 
@@ -19,9 +18,7 @@ export type ExportPhase = 'counting' | 'writing' | 'finalizing'
 export interface ViewerState {
   // Render settings
   colorMode: ColorMode
-  pointSize: number
-  pointShape: PointShape
-  blendMode: BlendMode
+  sizeMultiplier: number
   pointBudget: number
   qualityPreset: QualityPreset
 
@@ -62,9 +59,7 @@ export interface ViewerState {
 
 export interface ViewerActions {
   setColorMode: (mode: ColorMode) => void
-  setPointSize: (size: number) => void
-  setPointShape: (shape: PointShape) => void
-  setBlendMode: (mode: BlendMode) => void
+  setSizeMultiplier: (multiplier: number) => void
   setPointBudget: (budget: number) => void
   setQualityPreset: (preset: QualityPreset) => void
   setEdlEnabled: (enabled: boolean) => void
@@ -92,9 +87,7 @@ const POINT_BUDGETS: Record<QualityPreset, number> = {
 
 const initialState: ViewerState = {
   colorMode: ColorMode.RGB,
-  pointSize: 2,
-  pointShape: 'circle',
-  blendMode: 'opaque',
+  sizeMultiplier: 1.0,
   pointBudget: POINT_BUDGETS.medium,
   qualityPreset: 'medium',
   edlEnabled: true,
@@ -126,11 +119,7 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
 
   setColorMode: mode => set({ colorMode: mode }),
 
-  setPointSize: size => set({ pointSize: size }),
-
-  setPointShape: shape => set({ pointShape: shape }),
-
-  setBlendMode: mode => set({ blendMode: mode }),
+  setSizeMultiplier: multiplier => set({ sizeMultiplier: multiplier }),
 
   setPointBudget: budget => set({ pointBudget: budget }),
 

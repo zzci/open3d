@@ -13,11 +13,7 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<PointCloudRenderer | null>(null)
   const colorMode = useViewerStore(s => s.colorMode)
-  const pointSize = useViewerStore(s => s.pointSize)
-  const edlEnabled = useViewerStore(s => s.edlEnabled)
-  const edlRadius = useViewerStore(s => s.edlRadius)
-  const edlStrength = useViewerStore(s => s.edlStrength)
-  const edlExponent = useViewerStore(s => s.edlExponent)
+  const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
 
@@ -27,7 +23,7 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     if (!canvas)
       return
 
-    const renderer = new PointCloudRenderer(canvas, { colorMode, pointSize })
+    const renderer = new PointCloudRenderer(canvas, { colorMode, sizeMultiplier })
     rendererRef.current = renderer
     onRendererReady(renderer)
 
@@ -45,24 +41,10 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     rendererRef.current?.updateColorMode(colorMode)
   }, [colorMode])
 
-  // Sync point size
+  // Sync size multiplier
   useEffect(() => {
-    rendererRef.current?.updatePointSize(pointSize)
-  }, [pointSize])
-
-  // Sync EDL enabled
-  useEffect(() => {
-    rendererRef.current?.updateEdlEnabled(edlEnabled)
-  }, [edlEnabled])
-
-  // Sync EDL parameters
-  useEffect(() => {
-    rendererRef.current?.updateEdlParams({
-      radius: edlRadius,
-      strength: edlStrength,
-      exponent: edlExponent,
-    })
-  }, [edlRadius, edlStrength, edlExponent])
+    rendererRef.current?.updateSizeMultiplier(sizeMultiplier)
+  }, [sizeMultiplier])
 
   // Sync selection highlight to renderer
   useEffect(() => {

@@ -83,7 +83,10 @@ describe('tileMesh', () => {
     const { TileMesh } = await import('./tile-mesh')
     const data = makeTileData()
     const tile = new TileMesh(data, {
-      pointSize: 2.0,
+      nodeSpacing: 1.0,
+      sizeMultiplier: 1.0,
+      screenHeight: 600,
+      fov: Math.PI / 3,
       colorMode: ColorMode.RGB,
       heightMin: 0,
       heightMax: 10,
@@ -103,7 +106,10 @@ describe('tileMesh', () => {
     const { TileMesh } = await import('./tile-mesh')
     const data = makeTileData({ colors: undefined })
     const tile = new TileMesh(data, {
-      pointSize: 2.0,
+      nodeSpacing: 1.0,
+      sizeMultiplier: 1.0,
+      screenHeight: 600,
+      fov: Math.PI / 3,
       colorMode: ColorMode.RGB,
       heightMin: 0,
       heightMax: 10,
@@ -122,7 +128,10 @@ describe('tileMesh', () => {
     const { TileMesh } = await import('./tile-mesh')
     const data = makeTileData()
     const tile = new TileMesh(data, {
-      pointSize: 2.0,
+      nodeSpacing: 1.0,
+      sizeMultiplier: 1.0,
+      screenHeight: 600,
+      fov: Math.PI / 3,
       colorMode: ColorMode.RGB,
       heightMin: 0,
       heightMax: 10,
@@ -130,19 +139,22 @@ describe('tileMesh', () => {
 
     const mat = tile.points.material as unknown as { uniforms: Record<string, { value: unknown }> }
     expect(mat.uniforms.uColorMode!.value).toBe(ColorMode.RGB)
-    expect(mat.uniforms.uPointSize!.value).toBe(2.0)
+    expect(mat.uniforms.uSizeMultiplier!.value).toBe(1.0)
 
-    tile.updateUniforms({ colorMode: ColorMode.Height, pointSize: 4.0 })
+    tile.updateUniforms({ colorMode: ColorMode.Height, sizeMultiplier: 2.0 })
 
     expect(mat.uniforms.uColorMode!.value).toBe(ColorMode.Height)
-    expect(mat.uniforms.uPointSize!.value).toBe(4.0)
+    expect(mat.uniforms.uSizeMultiplier!.value).toBe(2.0)
   })
 
   it('disposes geometry and material on dispose()', async () => {
     const { TileMesh } = await import('./tile-mesh')
     const data = makeTileData()
     const tile = new TileMesh(data, {
-      pointSize: 2.0,
+      nodeSpacing: 1.0,
+      sizeMultiplier: 1.0,
+      screenHeight: 600,
+      fov: Math.PI / 3,
       colorMode: ColorMode.RGB,
       heightMin: 0,
       heightMax: 10,
@@ -168,7 +180,10 @@ describe('disposeSharedResources', () => {
     const data = makeTileData()
     // Creating a tile initializes the shared palette
     const _tile = new TileMesh(data, {
-      pointSize: 2.0,
+      nodeSpacing: 1.0,
+      sizeMultiplier: 1.0,
+      screenHeight: 600,
+      fov: Math.PI / 3,
       colorMode: ColorMode.RGB,
       heightMin: 0,
       heightMax: 10,

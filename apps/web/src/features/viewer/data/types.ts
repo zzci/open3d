@@ -86,6 +86,7 @@ export interface TileData {
   level: number
   pointCount: number
   bounds: Bounds
+  spacing?: number // meters — node spacing for adaptive point sizing
   positions: Float32Array
   colors?: Uint8Array
   intensity?: Float32Array
