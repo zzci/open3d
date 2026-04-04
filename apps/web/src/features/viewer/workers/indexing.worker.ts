@@ -40,10 +40,10 @@ const PROGRESS_INTERVAL = 100_000
 
 /**
  * Threshold (in points) above which we use the streaming multi-pass indexer
- * instead of the in-memory approach. 10M points ≈ ~400MB in memory for the
+ * instead of the in-memory approach. 20M points ≈ ~800MB in memory for the
  * in-memory path, which is still manageable. Above that, switch to streaming.
  */
-const STREAMING_THRESHOLD = 10_000_000
+const STREAMING_THRESHOLD = 20_000_000
 
 // ---------------------------------------------------------------------------
 // Worker state
