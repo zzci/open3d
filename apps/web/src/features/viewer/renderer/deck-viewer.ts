@@ -408,19 +408,6 @@ export class DeckViewer {
       return
     computeColors(this.data, this.config.colorMode, this.colorBuf)
 
-    // Boost brightness for sub-pixel points — compensate area loss
-    // At radius=1, area=π≈3.14px. At radius=0.3, area≈0.28px → 11x less visible.
-    // Boost factor = 1/radius² clamped to [1, 4] to keep colors from saturating.
-    const r = this.config.pointSizeMultiplier
-    if (r < 1) {
-      const boost = Math.min(4, 1 / (r * r))
-      const buf = this.colorBuf
-      const n = this.data.count * 3
-      for (let i = 0; i < n; i++) {
-        buf[i] = Math.min(255, (buf[i]! * boost) | 0)
-      }
-    }
-
     // Apply highlight overlay
     if (this.highlightBuf) {
       for (let i = 0; i < this.data.count; i++) {
