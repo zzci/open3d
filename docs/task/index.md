@@ -49,7 +49,7 @@ Each task is a single line linking to its detail file. All detailed information 
 - [-] [**FEAT-014 Streaming multi-pass indexing for large LAS files**](FEAT-014.md) `P1`
 - [ ] [**FEAT-015 Eye-Dome Lighting (EDL) multi-pass rendering**](FEAT-015.md) `P1`
 - [ ] [**FEAT-016 Adaptive point sizing from octree spacing**](FEAT-016.md) `P1`
-- [ ] [**FEAT-017 Smooth point edges with Gaussian alpha falloff**](FEAT-017.md) `P1`
+- [x] [**FEAT-017 Smooth point edges with Gaussian alpha falloff**](FEAT-017.md) `P1`
 - [ ] [**FEAT-018 Production color palettes**](FEAT-018.md) `P1`
 - [ ] [**FEAT-019 Extended color modes**](FEAT-019.md) `P1`
 - [ ] [**FEAT-020 Intensity normalization**](FEAT-020.md) `P2`

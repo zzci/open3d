@@ -17,16 +17,15 @@
  */
 
 import type { LasHeader } from './las-reader'
-import type { Bounds, OctreeNode } from './types'
 import type { TileAttributes } from './octree-builder'
-import type { ProgressCallback, TileWriteCallback, CancelCheck } from './streaming-indexer'
+import type { CancelCheck, ProgressCallback, TileWriteCallback } from './streaming-indexer'
+import type { Bounds, OctreeNode } from './types'
+import { formatHasColor } from './las-reader'
 import {
   encodeTileBinary,
-  LOD_SAMPLES_PER_NODE,
   MIN_LEAF_POINTS,
 } from './octree-builder'
 import { childBounds, classifyOctant } from './streaming-indexer'
-import { formatHasColor } from './las-reader'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +85,8 @@ export async function lazCountAllLevels(
     decoder.open(srcPtr, compressedBytes.length)
 
     for (let i = 0; i < pointCount; i++) {
-      if (i % 500_000 === 0 && cancel?.()) throw new Error('Cancelled')
+      if (i % 500_000 === 0 && cancel?.())
+        throw new Error('Cancelled')
 
       decoder.getPoint(pointPtr)
       const pointBytes = lp.HEAPU8.slice(pointPtr, pointPtr + pointRecordLength)
@@ -157,7 +157,8 @@ function collectLeaves(
   maxDepth: number,
   leafMap: Map<string, LeafDescriptor>,
 ): void {
-  if (node.count === 0) return
+  if (node.count === 0)
+    return
 
   const isLeaf = depth >= maxDepth
     || node.count <= MIN_LEAF_POINTS
@@ -182,7 +183,8 @@ function collectLeaves(
 
   for (let o = 0; o < 8; o++) {
     const child = node.children[o]
-    if (!child || child.count === 0) continue
+    if (!child || child.count === 0)
+      continue
 
     const childDepth = depth + 1
     const childX = parentX * 2 + (o & 1)
@@ -258,7 +260,8 @@ export async function lazMaterializeLeaves(
     decoder.open(srcPtr, compressedBytes.length)
 
     for (let i = 0; i < pointCount; i++) {
-      if (i % 500_000 === 0 && cancel?.()) throw new Error('Cancelled')
+      if (i % 500_000 === 0 && cancel?.())
+        throw new Error('Cancelled')
 
       decoder.getPoint(pointPtr)
       const pointBytes = lp.HEAPU8.slice(pointPtr, pointPtr + pointRecordLength)
@@ -273,7 +276,8 @@ export async function lazMaterializeLeaves(
 
       // Find the leaf this point belongs to
       const leafId = findLeafId(x, y, z, bounds, targetDepth, leafMap)
-      if (!leafId) continue
+      if (!leafId)
+        continue
 
       const leaf = leafMap.get(leafId)!
       const a = leaf.attrs!
@@ -313,13 +317,16 @@ export async function lazMaterializeLeaves(
         a.returnNumber![w] = flagByte & 0x0F
         a.numberOfReturns![w] = (flagByte >> 4) & 0x0F
         const flagByte2 = view.getUint8(15)
-        if (a.classificationFlags) a.classificationFlags[w] = flagByte2 & 0x0F
-        if (a.scannerChannel) a.scannerChannel[w] = (flagByte2 >> 4) & 0x03
+        if (a.classificationFlags)
+          a.classificationFlags[w] = flagByte2 & 0x0F
+        if (a.scannerChannel)
+          a.scannerChannel[w] = (flagByte2 >> 4) & 0x03
         a.classification[w] = view.getUint8(16)
         a.userData![w] = view.getUint8(17)
         a.scanAngle![w] = view.getInt16(18, true) * 0.006
         a.pointSourceId![w] = view.getUint16(20, true)
-        if (a.gpsTime) a.gpsTime[w] = view.getFloat64(22, true)
+        if (a.gpsTime)
+          a.gpsTime[w] = view.getFloat64(22, true)
         if (a.colors && pointFormat >= 7) {
           a.colors[w * 3] = view.getUint16(30, true) >> 8
           a.colors[w * 3 + 1] = view.getUint16(32, true) >> 8
@@ -422,7 +429,9 @@ export async function lazMaterializeLeaves(
 // ---------------------------------------------------------------------------
 
 function findLeafId(
-  x: number, y: number, z: number,
+  x: number,
+  y: number,
+  z: number,
   bounds: Bounds,
   maxDepth: number,
   leafMap: Map<string, LeafDescriptor>,
@@ -434,9 +443,11 @@ function findLeafId(
   let parentZ = 0
 
   for (let d = 0; d <= maxDepth; d++) {
-    if (leafMap.has(nodeId)) return nodeId
+    if (leafMap.has(nodeId))
+      return nodeId
 
-    if (d === maxDepth) break
+    if (d === maxDepth)
+      break
 
     const midX = (nodeBounds.min[0] + nodeBounds.max[0]) * 0.5
     const midY = (nodeBounds.min[1] + nodeBounds.max[1]) * 0.5
@@ -462,4 +473,4 @@ function findLeafId(
 // Exports
 // ---------------------------------------------------------------------------
 
-export type { OctantCountNode, LeafDescriptor }
+export type { LeafDescriptor, OctantCountNode }

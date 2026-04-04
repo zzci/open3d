@@ -1,5 +1,5 @@
 import type { LasHeader } from '../data/las-reader'
-import type { BuilderNode } from '../data/octree-builder'
+import type { BuilderNode, TileAttributes } from '../data/octree-builder'
 import type {
   DatasetDescriptor,
   IndexingPayload,
@@ -20,7 +20,6 @@ import {
   parseVlrs,
   readChunks,
 } from '../data/las-reader'
-import type { TileAttributes } from '../data/octree-builder'
 import {
   buildHierarchyNodes,
   buildOctree,
@@ -330,7 +329,12 @@ async function indexFileStreaming(
     })
 
     const { leafMap } = await lazCountAllLevels(
-      file, header, header.bounds, targetDepth, progressCb, isCancelled,
+      file,
+      header,
+      header.bounds,
+      targetDepth,
+      progressCb,
+      isCancelled,
     )
 
     sendProgress(requestId, {
@@ -341,8 +345,14 @@ async function indexFileStreaming(
     })
 
     const leafHierarchy = await lazMaterializeLeaves(
-      file, header, header.bounds, targetDepth, leafMap,
-      tileWriter, progressCb, isCancelled,
+      file,
+      header,
+      header.bounds,
+      targetDepth,
+      leafMap,
+      tileWriter,
+      progressCb,
+      isCancelled,
     )
 
     // Build internal node LOD tiles by reading back child tiles
@@ -368,8 +378,13 @@ async function indexFileStreaming(
     })
 
     const result = await buildStreamingOctree(
-      file, header, header.bounds, targetDepth,
-      tileWriter, progressCb, isCancelled,
+      file,
+      header,
+      header.bounds,
+      targetDepth,
+      tileWriter,
+      progressCb,
+      isCancelled,
     )
 
     hierarchyNodes = result.hierarchy
@@ -399,7 +414,8 @@ function buildInternalNodesFromLeaves(
   // Build parent nodes bottom-up
   for (let d = maxDepth; d >= 1; d--) {
     for (const node of nodeMap.values()) {
-      if (node.level !== d) continue
+      if (node.level !== d)
+        continue
 
       const parts = node.id.split('-')
       const x = Number.parseInt(parts[1]!, 10)

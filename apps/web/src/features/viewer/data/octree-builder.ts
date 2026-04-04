@@ -213,13 +213,18 @@ export function encodeTileBinary(
   }
 
   let flags = 0
-  if (attrs.colors) flags |= FLAG_HAS_COLOR
+  if (attrs.colors)
+    flags |= FLAG_HAS_COLOR
   flags |= FLAG_HAS_INTENSITY
   flags |= FLAG_HAS_CLASSIFICATION
-  if (attrs.returnNumber) flags |= FLAG_HAS_RETURN_NUMBER
-  if (attrs.gpsTime) flags |= FLAG_HAS_GPS_TIME
-  if (attrs.scanAngle) flags |= FLAG_HAS_SCAN_ANGLE
-  if (attrs.nir) flags |= FLAG_HAS_NIR
+  if (attrs.returnNumber)
+    flags |= FLAG_HAS_RETURN_NUMBER
+  if (attrs.gpsTime)
+    flags |= FLAG_HAS_GPS_TIME
+  if (attrs.scanAngle)
+    flags |= FLAG_HAS_SCAN_ANGLE
+  if (attrs.nir)
+    flags |= FLAG_HAS_NIR
   if (attrs.userData || attrs.pointSourceId || attrs.numberOfReturns
     || attrs.classificationFlags || attrs.scannerChannel) {
     flags |= FLAG_HAS_EXTRA
@@ -227,13 +232,18 @@ export function encodeTileBinary(
 
   const headerSize = 8
   let size = headerSize + pointCount * 12 // positions always
-  if (attrs.colors) size += pointCount * 3
+  if (attrs.colors)
+    size += pointCount * 3
   size += pointCount * 4 // intensity
   size += pointCount // classification
-  if (flags & FLAG_HAS_RETURN_NUMBER) size += pointCount // uint8
-  if (flags & FLAG_HAS_GPS_TIME) size += pointCount * 8 // float64
-  if (flags & FLAG_HAS_SCAN_ANGLE) size += pointCount * 4 // float32
-  if (flags & FLAG_HAS_NIR) size += pointCount * 2 // uint16
+  if (flags & FLAG_HAS_RETURN_NUMBER)
+    size += pointCount // uint8
+  if (flags & FLAG_HAS_GPS_TIME)
+    size += pointCount * 8 // float64
+  if (flags & FLAG_HAS_SCAN_ANGLE)
+    size += pointCount * 4 // float32
+  if (flags & FLAG_HAS_NIR)
+    size += pointCount * 2 // uint16
   if (flags & FLAG_HAS_EXTRA) {
     size += pointCount // numberOfReturns (uint8)
     size += pointCount // userData (uint8)
@@ -490,9 +500,20 @@ export function decodeTileBinary(buffer: ArrayBuffer): DecodedTile {
   }
 
   return {
-    pointCount, positions, colors, intensity, classification,
-    returnNumber, gpsTime, scanAngle, nir,
-    numberOfReturns, userData, pointSourceId, classificationFlags, scannerChannel,
+    pointCount,
+    positions,
+    colors,
+    intensity,
+    classification,
+    returnNumber,
+    gpsTime,
+    scanAngle,
+    nir,
+    numberOfReturns,
+    userData,
+    pointSourceId,
+    classificationFlags,
+    scannerChannel,
   }
 }
 
