@@ -300,6 +300,7 @@ export class DeckViewer {
 
     this.deck = new Deck({
       parent: container as any,
+      glOptions: { alpha: false },
       views: new OrbitView({ orbitAxis: 'Z', near: 0.01, far: 10000 }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
