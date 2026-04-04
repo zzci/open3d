@@ -13,6 +13,7 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<PointCloudRenderer | null>(null)
   const colorMode = useViewerStore(s => s.colorMode)
+  const intensityNormMode = useViewerStore(s => s.intensityNormMode)
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
@@ -40,6 +41,11 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   useEffect(() => {
     rendererRef.current?.updateColorMode(colorMode)
   }, [colorMode])
+
+  // Sync intensity normalization mode
+  useEffect(() => {
+    rendererRef.current?.updateIntensityNormMode(intensityNormMode)
+  }, [intensityNormMode])
 
   // Sync size multiplier
   useEffect(() => {

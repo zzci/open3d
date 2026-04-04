@@ -1,4 +1,4 @@
-import type { QualityPreset } from '../store'
+import type { IntensityNormMode, QualityPreset } from '../store'
 import { Button } from '@/shared/components/ui/button'
 import {
   Select,
@@ -11,6 +11,11 @@ import { Slider } from '@/shared/components/ui/slider'
 import { formatMillions } from '../lib/format'
 import { COLOR_MODE_LABELS, ColorMode } from '../renderer/color-modes'
 import { useViewerStore } from '../store'
+
+const INTENSITY_NORM_OPTIONS: { value: IntensityNormMode, label: string }[] = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'histogram', label: 'Histogram EQ' },
+]
 
 interface ToolbarProps {
   onExport?: () => void
@@ -41,6 +46,8 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
 
 export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
+  const intensityNormMode = useViewerStore(s => s.intensityNormMode)
+  const setIntensityNormMode = useViewerStore(s => s.setIntensityNormMode)
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const pointBudget = useViewerStore(s => s.pointBudget)
   const qualityPreset = useViewerStore(s => s.qualityPreset)
@@ -80,6 +87,25 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
           </SelectContent>
         </Select>
       </div>
+
+      {/* Intensity normalization — shown only in Intensity color mode */}
+      {colorMode === ColorMode.Intensity && (
+        <>
+          <div className="flex items-center gap-1">
+            {INTENSITY_NORM_OPTIONS.map(opt => (
+              <Button
+                key={opt.value}
+                variant={intensityNormMode === opt.value ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setIntensityNormMode(opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="h-4 w-px bg-border" />
 

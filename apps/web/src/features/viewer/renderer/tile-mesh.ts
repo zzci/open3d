@@ -1,4 +1,5 @@
 import type { TileData } from '../data/types'
+import type { IntensityNormMode } from '../store'
 import type { ColorMode } from './color-modes'
 import {
   AdditiveBlending,
@@ -66,8 +67,10 @@ export class TileMesh {
   readonly points: Points
   private readonly geometry: BufferGeometry
   private readonly material: ShaderMaterial
+  private readonly intensityLinear: Float32Array
+  private readonly intensityEqualized: Float32Array
 
-  constructor(data: TileData, uniforms: PointUniforms) {
+  constructor(data: TileData, uniforms: PointUniforms, intensityNormMode: IntensityNormMode = 'linear') {
     this.geometry = new BufferGeometry()
     this.material = TileMesh.createMaterial(uniforms)
 
@@ -88,17 +91,11 @@ export class TileMesh {
       this.geometry.setAttribute('aColor', new BufferAttribute(white, 3))
     }
 
-    // Intensity attribute
-    if (data.intensity) {
-      this.geometry.setAttribute(
-        'aIntensity',
-        new BufferAttribute(data.intensity, 1),
-      )
-    }
-    else {
-      const zeros = new Float32Array(data.pointCount)
-      this.geometry.setAttribute('aIntensity', new BufferAttribute(zeros, 1))
-    }
+    // Intensity attributes — store both linear and equalized for runtime swap
+    this.intensityLinear = data.intensity ?? new Float32Array(data.pointCount)
+    this.intensityEqualized = data.intensityEqualized ?? this.intensityLinear
+    const activeIntensity = intensityNormMode === 'histogram' ? this.intensityEqualized : this.intensityLinear
+    this.geometry.setAttribute('aIntensity', new BufferAttribute(activeIntensity, 1))
 
     // Classification attribute
     if (data.classification) {
@@ -190,6 +187,15 @@ export class TileMesh {
         break
     }
     m.needsUpdate = true
+  }
+
+  /** Swap the active intensity buffer between linear and equalized */
+  setIntensityNormMode(mode: IntensityNormMode): void {
+    const target = mode === 'histogram' ? this.intensityEqualized : this.intensityLinear
+    const attr = this.geometry.getAttribute('aIntensity') as BufferAttribute
+    if (attr.array !== target) {
+      this.geometry.setAttribute('aIntensity', new BufferAttribute(target, 1))
+    }
   }
 
   /** Update per-point selection mask from Uint8Array bitmask */
