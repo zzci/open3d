@@ -31,7 +31,7 @@ const COLOR_MODES = [
 ]
 
 type InteractionMode = 'navigate' | 'select'
-interface SelectionInfo { m: Float64Array, w: number, h: number, rect: [number, number, number, number] }
+interface SelectionInfo { bitmap: Uint8Array, selectedCount: number, m: Float64Array, rect: [number, number, number, number] }
 
 /**
  * Fast inline projection: pixelProjectionMatrix × point → pixel coords.
@@ -197,7 +197,7 @@ function ViewerPage() {
     viewer.setHighlight(hl)
     setSelectedCount(found)
     setHasSelection(true)
-    selectionRef.current = { m: pm, w: 0, h: 0, rect: [L, T, R, B] }
+    selectionRef.current = { bitmap: hl, selectedCount: found, m: pm, rect: [L, T, R, B] }
   }, [data, mode])
 
   const clearSelection = useCallback(() => {
@@ -211,28 +211,26 @@ function ViewerPage() {
   const handleDelete = useCallback((keep: boolean) => {
     const sel = selectionRef.current
     if (!sel || !data) return
-    const [L, T, R, B] = sel.rect
-    const { m: pm } = sel
-    const pos = data.positions, n = data.count
+    const { bitmap: selBitmap } = sel
+    const n = data.count
 
+    // Use stored selection bitmap — no re-projection needed
+    // keep=false: delete selected (bitmap=1), keep=true: delete unselected (bitmap=0)
     let removed = 0
-    const bitmap = new Uint8Array(n)
+    const deleteBitmap = new Uint8Array(n)
     for (let i = 0; i < n; i++) {
-      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
-      const inside = p ? (p.sx >= L && p.sx <= R && p.sy >= T && p.sy <= B) : false
-      const shouldDelete = keep ? !inside : inside
-      if (shouldDelete) { bitmap[i] = 1; removed++ }
+      const shouldDelete = keep ? !selBitmap[i] : !!selBitmap[i]
+      if (shouldDelete) { deleteBitmap[i] = 1; removed++ }
     }
     if (removed === 0) return
 
-    // Compact arrays
     const nn = n - removed
     const np = new Float32Array(nn * 3)
     const nc = new Uint8Array(nn * 3)
     const ni = new Uint8Array(nn)
     let j = 0
     for (let i = 0; i < n; i++) {
-      if (bitmap[i]) continue
+      if (deleteBitmap[i]) continue
       np[j * 3] = data.positions[i * 3]!
       np[j * 3 + 1] = data.positions[i * 3 + 1]!
       np[j * 3 + 2] = data.positions[i * 3 + 2]!
@@ -245,9 +243,9 @@ function ViewerPage() {
 
     const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
 
-    // Store EditOp for undo replay (uses projection matrix from selection time)
+    // Store EditOp for undo replay
     const vpSize = viewerRef.current?.getViewportSize()
-    const op: EditOp = { matrix: Array.from(pm), rect: sel.rect, vpWidth: vpSize?.width ?? 0, vpHeight: vpSize?.height ?? 0, keepInside: keep }
+    const op: EditOp = { matrix: Array.from(sel.m), rect: sel.rect, vpWidth: vpSize?.width ?? 0, vpHeight: vpSize?.height ?? 0, keepInside: keep }
     opsRef.current.push(op)
 
     setData(newData)
