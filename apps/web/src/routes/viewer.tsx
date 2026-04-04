@@ -1,613 +1,309 @@
-import type { DatasetDescriptor, IndexingProgress, IndexingResult, OctreeNode, TileData, WorkerResponse } from '@/features/viewer/data/types'
-import type { DeleteBySelectionOp, TileMask } from '@/features/viewer/editor/edit-log'
-import type { PointCloudRenderer } from '@/features/viewer/renderer/point-cloud-renderer'
+/* eslint-disable style/max-statements-per-line */
+import type { PointCloudData } from '@/features/viewer/renderer/deck-viewer'
 import { createFileRoute } from '@tanstack/react-router'
-import { useCallback, useEffect, useRef } from 'react'
-import { Matrix4 } from 'three'
-import { readTile } from '@/features/viewer/cache/opfs-cache'
-import { ExportDialog } from '@/features/viewer/components/export-dialog'
-import { FileOpener } from '@/features/viewer/components/file-opener'
-import { ProgressOverlay } from '@/features/viewer/components/progress-overlay'
-import { SelectionOverlay } from '@/features/viewer/components/selection-overlay'
-import { StatusBar } from '@/features/viewer/components/status-bar'
-import { Toolbar } from '@/features/viewer/components/toolbar'
-import { ViewerCanvas } from '@/features/viewer/components/viewer-canvas'
-import { parseCopc } from '@/features/viewer/data/copc-reader'
-import { decodeTileBinary } from '@/features/viewer/data/octree-builder'
-import { ExportSession } from '@/features/viewer/editor/export-session'
-import { useEditSession } from '@/features/viewer/hooks/use-edit-session'
-import { useSelection } from '@/features/viewer/hooks/use-selection'
-import { useWorkerPool } from '@/features/viewer/hooks/use-worker-pool'
-import { TileScheduler } from '@/features/viewer/scheduler/tile-scheduler'
-import { createCameraIdleDetector, extractFrustumPlanes } from '@/features/viewer/scheduler/view-state'
-import { useViewerStore } from '@/features/viewer/store'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadLAS } from '@/features/viewer/data/las-loader'
+import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
 
 export const Route = createFileRoute('/viewer')({
   component: ViewerPage,
 })
 
-// ---------------------------------------------------------------------------
-// Indexing Worker helper — runs LAS/LAZ → octree conversion
-// ---------------------------------------------------------------------------
+type InteractionMode = 'navigate' | 'select'
 
-/**
- * Indexing worker handle — stays alive after indexing to serve tile requests.
- * The worker holds the octree + point data in memory and encodes tiles on demand.
- */
-interface IndexingWorkerHandle {
-  result: IndexingResult
-  /** Request a tile from the worker. Worker encodes from in-memory data. */
-  getTile: (nodeId: string, level: number, bounds: import('@/features/viewer/data/types').Bounds) => Promise<TileData>
-  /** Terminate the worker and free memory. */
-  terminate: () => void
-}
-
-function createIndexingWorker(
-  file: File,
-  datasetId: string,
-  onProgress: (p: IndexingProgress) => void,
-): Promise<IndexingWorkerHandle> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL('../features/viewer/workers/indexing.worker.ts', import.meta.url),
-      { type: 'module' },
-    )
-    const indexRequestId = `index-${Date.now()}`
-    const pendingTiles = new Map<string, { resolve: (data: TileData) => void, reject: (err: Error) => void }>()
-
-    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-      const msg = e.data
-
-      if (msg.requestId === indexRequestId) {
-        // Indexing phase messages
-        if (msg.type === 'progress') {
-          onProgress(msg.payload as IndexingProgress)
-        }
-        else if (msg.type === 'result') {
-          const result = msg.payload as IndexingResult
-          // Don't terminate — worker stays alive as tile server
-          resolve({
-            result,
-            getTile: (nodeId, level, bounds) => {
-              const tileReqId = `tile-${nodeId}-${Date.now()}`
-              return new Promise((res, rej) => {
-                pendingTiles.set(tileReqId, { resolve: res, reject: rej })
-                worker.postMessage({
-                  requestId: tileReqId,
-                  type: 'get-tile',
-                  payload: { nodeId, level, bounds },
-                })
-              })
-            },
-            terminate: () => {
-              worker.terminate()
-              for (const [, p] of pendingTiles) {
-                p.reject(new Error('Worker terminated'))
-              }
-              pendingTiles.clear()
-            },
-          })
-        }
-        else if (msg.type === 'error') {
-          worker.terminate()
-          reject(new Error((msg.payload as { message: string }).message))
-        }
-      }
-      else {
-        // Tile request response
-        const pending = pendingTiles.get(msg.requestId)
-        if (pending) {
-          pendingTiles.delete(msg.requestId)
-          if (msg.type === 'result') {
-            pending.resolve(msg.payload as TileData)
-          }
-          else {
-            pending.reject(new Error((msg.payload as { message: string }).message ?? 'Tile decode failed'))
-          }
-        }
-      }
-    }
-
-    worker.onerror = (err) => {
-      worker.terminate()
-      reject(new Error(err.message || 'Indexing worker failed'))
-    }
-
-    worker.postMessage({
-      requestId: indexRequestId,
-      type: 'index',
-      payload: { file, datasetId } satisfies import('@/features/viewer/data/types').IndexingPayload,
-    })
-  })
+const COLOR_MODES = ['intensity', 'rgb', 'height', 'heightIntensity', 'white'] as const
+const COLOR_LABELS: Record<string, string> = {
+  intensity: 'Intensity',
+  rgb: 'RGB',
+  height: 'Height',
+  heightIntensity: 'Height × Intensity',
+  white: 'White',
 }
 
 function ViewerPage() {
-  const rendererRef = useRef<PointCloudRenderer | null>(null)
-  const schedulerRef = useRef<TileScheduler | null>(null)
-  const idleDetectorRef = useRef<ReturnType<typeof createCameraIdleDetector> | null>(null)
-  const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const exportSessionRef = useRef<ExportSession | null>(null)
-  const indexingWorkerRef = useRef<IndexingWorkerHandle | null>(null)
-  const cancelRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<DeckViewer | null>(null)
+  const dataRef = useRef<PointCloudData | null>(null)
+  const rectRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef({ active: false, sx: 0, sy: 0 })
 
-  const descriptor = useViewerStore(s => s.descriptor)
-  const pointBudget = useViewerStore(s => s.pointBudget)
-  const qualityPreset = useViewerStore(s => s.qualityPreset)
-  const selectionMap = useViewerStore(s => s.selectionMap)
-  const setDataset = useViewerStore(s => s.setDataset)
-  const setLoading = useViewerStore(s => s.setLoading)
-  const setLoadingProgress = useViewerStore(s => s.setLoadingProgress)
-  const setExporting = useViewerStore(s => s.setExporting)
-  const updateExportProgress = useViewerStore(s => s.updateExportProgress)
-  const updateStats = useViewerStore(s => s.updateStats)
-  const clearSelection = useViewerStore(s => s.clearSelection)
-  const reset = useViewerStore(s => s.reset)
+  const [loaded, setLoaded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [fileName, setFileName] = useState('')
+  const [pointCount, setPointCount] = useState(0)
+  const [colorMode, setColorMode] = useState<string>('intensity')
+  const [pointSize, setPointSize] = useState(1.0)
+  const [mode, setMode] = useState<InteractionMode>('navigate')
+  const [selectedCount, setSelectedCount] = useState(0)
+  const [lastSelection, setLastSelection] = useState<{ matrix: number[], rect: [number, number, number, number], vpWidth: number, vpHeight: number } | null>(null)
 
-  const workerPool = useWorkerPool()
-  const editSession = useEditSession(descriptor?.id ?? null)
-  const selection = useSelection(rendererRef.current)
-
-  // Clean up on unmount
+  // Init deck.gl viewer
   useEffect(() => {
+    if (!containerRef.current)
+      return
+    const viewer = new DeckViewer(containerRef.current, { colorMode, pointSizeMultiplier: pointSize })
+    viewerRef.current = viewer
     return () => {
-      schedulerRef.current?.dispose()
-      idleDetectorRef.current?.dispose()
-      if (statsIntervalRef.current)
-        clearInterval(statsIntervalRef.current)
-      exportSessionRef.current?.cancel()
-      indexingWorkerRef.current?.terminate()
-      reset()
+      viewer.dispose()
+      viewerRef.current = null
     }
-  }, [reset])
+  // eslint-disable-next-line react/exhaustive-deps
+  }, [])
 
-  // Apply selection masks to renderer
   useEffect(() => {
-    const renderer = rendererRef.current
-    if (!renderer)
-      return
-    renderer.updateSelection(selectionMap)
-  }, [selectionMap])
+    viewerRef.current?.setColorMode(colorMode)
+  }, [colorMode])
+  useEffect(() => {
+    viewerRef.current?.setPointSize(pointSize)
+  }, [pointSize])
+  useEffect(() => {
+    viewerRef.current?.setController(mode === 'navigate')
+  }, [mode])
 
-  const buildViewState = useCallback(() => {
-    const renderer = rendererRef.current
-    if (!renderer)
-      return null
-
-    const { camera } = renderer
-    camera.updateMatrixWorld()
-    const vp = new Matrix4().multiplyMatrices(
-      camera.projectionMatrix,
-      camera.matrixWorldInverse,
-    )
-
-    return {
-      frustumPlanes: extractFrustumPlanes(vp.elements),
-      cameraPosition: [
-        camera.position.x,
-        camera.position.y,
-        camera.position.z,
-      ] as readonly [number, number, number],
-      screenHeight: window.innerHeight,
-      fov: (camera.fov * Math.PI) / 180,
-    }
-  }, [])
-
-  const triggerSchedulerUpdate = useCallback(() => {
-    const scheduler = schedulerRef.current
-    if (!scheduler)
-      return
-    const view = buildViewState()
-    if (view)
-      scheduler.update(view)
-  }, [buildViewState])
-
-  const handleRendererReady = useCallback((renderer: PointCloudRenderer) => {
-    rendererRef.current = renderer
-  }, [])
-
-  const handleRendererDispose = useCallback(() => {
-    rendererRef.current = null
-    schedulerRef.current?.dispose()
-    schedulerRef.current = null
-    idleDetectorRef.current?.dispose()
-    idleDetectorRef.current = null
-    if (statsIntervalRef.current) {
-      clearInterval(statsIntervalRef.current)
-      statsIntervalRef.current = null
-    }
-  }, [])
-
-  const handleCancel = useCallback(() => {
-    cancelRef.current = true
-    setLoading(false)
-  }, [setLoading])
-
-  const setupScheduler = useCallback((
-    hierarchy: Map<string, import('@/features/viewer/data/types').OctreeNode>,
-    desc: DatasetDescriptor,
-    sourceFile: File,
-    pointRecordLength: number,
-  ) => {
-    const renderer = rendererRef.current
-    if (!renderer)
-      return
-
-    const scheduler = new TileScheduler(
-      hierarchy,
-      workerPool.decode,
-      {
-        onTileLoaded: (nodeId, data) => renderer.addTile(nodeId, data),
-        onTileEvicted: nodeId => renderer.removeTile(nodeId),
-      },
-      {
-        file: sourceFile,
-        pointFormat: desc.pointFormat,
-        pointRecordLength,
-        scale: desc.scale,
-        offset: desc.offset,
-      },
-      { pointBudget },
-    )
-    scheduler.setQuality(qualityPreset)
-    schedulerRef.current = scheduler
-
-    // Center camera on dataset bounds
-    const { bounds } = desc
-    const cx = (bounds.min[0] + bounds.max[0]) / 2
-    const cy = (bounds.min[1] + bounds.max[1]) / 2
-    const cz = (bounds.min[2] + bounds.max[2]) / 2
-    const dx = bounds.max[0] - bounds.min[0]
-    const dy = bounds.max[1] - bounds.min[1]
-    const dz = bounds.max[2] - bounds.min[2]
-    const size = Math.max(dx, dy, dz)
-
-    renderer.controls.target.set(cx, cy, cz)
-    renderer.camera.position.set(cx, cy + size * 0.5, cz + size)
-    renderer.camera.lookAt(cx, cy, cz)
-    renderer.controls.update()
-    renderer.updateHeightRange(bounds.min[1], bounds.max[1])
-
-    // Initial scheduling pass
-    const view = buildViewState()
-    if (view)
-      scheduler.update(view)
-
-    // Camera idle detection for re-scheduling
-    const detector = createCameraIdleDetector(() => {
-      triggerSchedulerUpdate()
-    }, 150)
-    idleDetectorRef.current = detector
-    renderer.controls.addEventListener('change', detector.onCameraMove)
-
-    // Poll stats
-    statsIntervalRef.current = setInterval(() => {
-      const s = schedulerRef.current
-      const r = rendererRef.current
-      if (s && r) {
-        updateStats({
-          loadedPointCount: s.loadedPointCount,
-          activeTileCount: s.activeTileCount,
-          fps: r.fps,
-        })
-      }
-    }, 500)
-  }, [workerPool.decode, pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
-
-  const setupSchedulerWithDecode = useCallback((
-    hierarchy: Map<string, OctreeNode>,
-    desc: DatasetDescriptor,
-    sourceFile: File,
-    pointRecordLength: number,
-    decode: (payload: import('@/features/viewer/data/types').DecodeTilePayload) => Promise<TileData>,
-  ) => {
-    const renderer = rendererRef.current
-    if (!renderer)
-      return
-
-    const scheduler = new TileScheduler(
-      hierarchy,
-      decode,
-      {
-        onTileLoaded: (nodeId, data) => renderer.addTile(nodeId, data),
-        onTileEvicted: nodeId => renderer.removeTile(nodeId),
-      },
-      {
-        file: sourceFile,
-        pointFormat: desc.pointFormat,
-        pointRecordLength,
-        scale: desc.scale,
-        offset: desc.offset,
-      },
-      { pointBudget },
-    )
-    scheduler.setQuality(qualityPreset)
-    schedulerRef.current = scheduler
-
-    const { bounds } = desc
-    const cx = (bounds.min[0] + bounds.max[0]) / 2
-    const cy = (bounds.min[1] + bounds.max[1]) / 2
-    const cz = (bounds.min[2] + bounds.max[2]) / 2
-    const size = Math.max(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2])
-
-    renderer.controls.target.set(cx, cy, cz)
-    renderer.camera.position.set(cx, cy + size * 0.5, cz + size)
-    renderer.camera.lookAt(cx, cy, cz)
-    renderer.controls.update()
-    renderer.updateHeightRange(bounds.min[1], bounds.max[1])
-
-    const view = buildViewState()
-    if (view)
-      scheduler.update(view)
-
-    const detector = createCameraIdleDetector(() => triggerSchedulerUpdate(), 150)
-    idleDetectorRef.current = detector
-    renderer.controls.addEventListener('change', detector.onCameraMove)
-
-    statsIntervalRef.current = setInterval(() => {
-      const s = schedulerRef.current
-      const r = rendererRef.current
-      if (s && r) {
-        updateStats({
-          loadedPointCount: s.loadedPointCount,
-          activeTileCount: s.activeTileCount,
-          fps: r.fps,
-        })
-      }
-    }, 500)
-  }, [pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
-
-  const handleFileLoaded = useCallback(async (desc: DatasetDescriptor, sourceFile: File) => {
-    const renderer = rendererRef.current
-    if (!renderer)
-      return
-
-    cancelRef.current = false
-    setDataset(desc, sourceFile)
-
+  const handleFile = useCallback(async (file: File) => {
+    setLoading(true)
+    setProgress(0)
+    setFileName(file.name)
+    setSelectedCount(0)
+    setLastSelection(null)
     try {
-      if (desc.sourceFormat === 'copc') {
-        // COPC path — parse hierarchy directly
-        setLoading(true, 'Reading header...')
-        const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
-          if (cancelRef.current)
-            return
-          setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
-          setLoadingProgress(percent)
-        })
-        if (cancelRef.current)
-          return
-        setLoading(false)
-
-        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
-        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-        setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
-      }
-      else {
-        // LAS/LAZ path — index in Worker, then use Worker as live tile server
-        setLoading(true, 'Indexing point cloud...')
-        const handle = await createIndexingWorker(
-          sourceFile,
-          desc.id,
-          (progress) => {
-            if (cancelRef.current)
-              return
-            setLoading(true, `${progress.phase} (${Math.round(progress.pointsProcessed / Math.max(progress.totalPoints, 1) * 100)}%)`)
-            setLoadingProgress(progress.pointsProcessed / Math.max(progress.totalPoints, 1) * 100)
-          },
-        )
-        if (cancelRef.current) {
-          handle.terminate()
-          return
-        }
-        setLoading(false)
-
-        // Store handle ref for cleanup
-        indexingWorkerRef.current = handle
-
-        // Build hierarchy map
-        const hierarchy = new Map<string, OctreeNode>()
-        for (const node of handle.result.hierarchy) {
-          hierarchy.set(node.id, node)
-        }
-
-        // Decode dispatcher: asks the indexing worker for tiles on demand
-        const workerDecode = async (payload: import('@/features/viewer/data/types').DecodeTilePayload): Promise<TileData> => {
-          return handle.getTile(payload.nodeId, payload.level, payload.bounds)
-        }
-
-        const finalDesc = handle.result.descriptor ?? desc
-        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
-        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-        setupSchedulerWithDecode(hierarchy, finalDesc, sourceFile, pointRecordLength, workerDecode)
-      }
+      const data = await loadLAS(file, 10_000_000, pct => setProgress(Math.round(pct * 100)))
+      dataRef.current = data
+      viewerRef.current?.setData(data)
+      setPointCount(data.count)
+      setLoaded(true)
     }
     catch (err) {
-      if (!cancelRef.current) {
-        setLoading(false)
+      console.error('Failed to load:', err)
+    }
+    finally {
+      setLoading(false)
+    }
+  }, [])
 
-        console.error('File loading failed:', err)
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file)
+      handleFile(file)
+  }, [handleFile])
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file)
+      handleFile(file)
+  }, [handleFile])
+
+  // Selection
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (mode !== 'select' || e.button !== 0)
+      return
+    const r = containerRef.current!.getBoundingClientRect()
+    dragRef.current = { active: true, sx: e.clientX - r.left, sy: e.clientY - r.top }
+    const rect = rectRef.current!
+    rect.style.display = 'block'
+    rect.style.left = `${dragRef.current.sx}px`
+    rect.style.top = `${dragRef.current.sy}px`
+    rect.style.width = '0'
+    rect.style.height = '0'
+  }, [mode])
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragRef.current.active)
+      return
+    const r = containerRef.current!.getBoundingClientRect()
+    const cx = e.clientX - r.left
+    const cy = e.clientY - r.top
+    const rect = rectRef.current!
+    rect.style.left = `${Math.min(dragRef.current.sx, cx)}px`
+    rect.style.top = `${Math.min(dragRef.current.sy, cy)}px`
+    rect.style.width = `${Math.abs(cx - dragRef.current.sx)}px`
+    rect.style.height = `${Math.abs(cy - dragRef.current.sy)}px`
+  }, [])
+
+  const onMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!dragRef.current.active)
+      return
+    dragRef.current.active = false
+    rectRef.current!.style.display = 'none'
+    const data = dataRef.current
+    const viewer = viewerRef.current
+    if (!data || !viewer)
+      return
+    const r = containerRef.current!.getBoundingClientRect()
+    const cx = e.clientX - r.left
+    const cy = e.clientY - r.top
+    const L = Math.min(dragRef.current.sx, cx)
+    const T = Math.min(dragRef.current.sy, cy)
+    const R = Math.max(dragRef.current.sx, cx)
+    const B = Math.max(dragRef.current.sy, cy)
+    if (R - L < 5 || B - T < 5)
+      return
+    const m = viewer.getViewProjectionMatrix()
+    if (!m)
+      return
+    const { width: vpW, height: vpH } = viewer.getViewportSize()
+    const pos = data.positions
+    const hl = new Uint8Array(data.count)
+    let found = 0
+    for (let i = 0; i < data.count; i++) {
+      const px = pos[i * 3]!; const py = pos[i * 3 + 1]!; const pz = pos[i * 3 + 2]!
+      const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
+      if (cw <= 0)
+        continue
+      const sx = ((m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) / cw * 0.5 + 0.5) * vpW
+      const sy = (0.5 - (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) / cw * 0.5) * vpH
+      if (sx >= L && sx <= R && sy >= T && sy <= B) {
+        hl[i] = 1
+        found++
       }
     }
-  }, [setDataset, setLoading, setLoadingProgress, setupScheduler, setupSchedulerWithDecode])
-
-  // --- Selection actions: Delete / Keep ---
-
-  const handleDeleteSelected = useCallback(() => {
-    const sm = useViewerStore.getState().selectionMap
-    if (sm.size === 0)
+    if (!found)
       return
-    const masks: TileMask[] = []
-    for (const [tileId, mask] of sm) {
-      masks.push({ tileId, mask })
-    }
-    const op: DeleteBySelectionOp = { type: 'deleteBySelection', masks }
-    const renderer = rendererRef.current
-    const cam = renderer?.camera
-    const ctrl = renderer?.controls
-    editSession.apply(op, cam && ctrl
-      ? {
-          position: [cam.position.x, cam.position.y, cam.position.z],
-          target: [ctrl.target.x, ctrl.target.y, ctrl.target.z],
-        }
-      : null)
+    viewer.setHighlight(hl)
+    setSelectedCount(found)
+    setLastSelection({ matrix: m, rect: [L, T, R, B], vpWidth: vpW, vpHeight: vpH })
+  }, [mode])
 
-    // Visual feedback: hide deleted points by zeroing their positions in the GPU buffer
-    if (renderer) {
-      for (const [tileId, mask] of sm) {
-        renderer.applyDeletionMask(tileId, mask)
+  // Edit
+  const handleDelete = useCallback((keepInside: boolean) => {
+    const data = dataRef.current
+    const viewer = viewerRef.current
+    const sel = lastSelection
+    if (!data || !viewer || !sel)
+      return
+    const { matrix: m, rect: [L, T, R, B], vpWidth: w, vpHeight: h } = sel
+    const pos = data.positions
+    const n = data.count
+    let removed = 0
+    const bitmap = new Uint8Array(n)
+    for (let i = 0; i < n; i++) {
+      const px = pos[i * 3]!; const py = pos[i * 3 + 1]!; const pz = pos[i * 3 + 2]!
+      const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
+      if (cw <= 0) {
+        if (keepInside) { bitmap[i] = 1; removed++ }
+        continue
       }
+      const sx = ((m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) / cw * 0.5 + 0.5) * w
+      const sy = (0.5 - (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) / cw * 0.5) * h
+      const inside = sx >= L && sx <= R && sy >= T && sy <= B
+      if (keepInside ? !inside : inside) { bitmap[i] = 1; removed++ }
     }
-    clearSelection()
-  }, [editSession, clearSelection])
-
-  const handleKeepSelected = useCallback(() => {
-    const sm = useViewerStore.getState().selectionMap
-    if (sm.size === 0)
+    if (removed === 0)
       return
-    const masks: TileMask[] = []
-    for (const [tileId, mask] of sm) {
-      const inverted = new Uint8Array(mask.length)
-      for (let i = 0; i < mask.length; i++) {
-        inverted[i] = mask[i] === 1 ? 0 : 1
-      }
-      masks.push({ tileId, mask: inverted })
+    const nn = n - removed
+    const np = new Float32Array(nn * 3)
+    const nc = new Uint8Array(nn * 3)
+    const ni = new Uint8Array(nn)
+    let j = 0
+    for (let i = 0; i < n; i++) {
+      if (bitmap[i])
+        continue
+      np[j * 3] = data.positions[i * 3]!
+      np[j * 3 + 1] = data.positions[i * 3 + 1]!
+      np[j * 3 + 2] = data.positions[i * 3 + 2]!
+      nc[j * 3] = data.colors[i * 3]!
+      nc[j * 3 + 1] = data.colors[i * 3 + 1]!
+      nc[j * 3 + 2] = data.colors[i * 3 + 2]!
+      ni[j] = data.intensity[i]!
+      j++
     }
-    const op: DeleteBySelectionOp = { type: 'deleteBySelection', masks }
-    editSession.apply(op)
+    const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
+    dataRef.current = newData
+    viewer.setHighlight(null)
+    viewer.setData(newData)
+    setPointCount(nn)
+    setSelectedCount(0)
+    setLastSelection(null)
+  }, [lastSelection])
 
-    // Visual feedback: hide non-selected (inverted mask = deleted) points
-    const renderer = rendererRef.current
-    if (renderer) {
-      for (const { tileId, mask } of masks) {
-        renderer.applyDeletionMask(tileId, mask)
-      }
-    }
-    clearSelection()
-  }, [editSession, clearSelection])
+  const handleClear = useCallback(() => {
+    viewerRef.current?.setHighlight(null)
+    setSelectedCount(0)
+    setLastSelection(null)
+  }, [])
 
-  // --- Export ---
-
-  const handleExport = useCallback(() => {
-    const state = useViewerStore.getState()
-    if (!state.descriptor || !state.file)
-      return
-
-    setExporting(true)
-    const session = new ExportSession()
-    exportSessionRef.current = session
-
-    session.start({
-      file: state.file,
-      descriptor: state.descriptor,
-      editLog: editSession.activeEntries.map((e) => {
-        const op = e.operation
-        // Convert edit-log.ts EditOperation → export-session EditLogEntry
-        // deleteBySelection: TileMask[] → Record<string, Set<number>>
-        // Other ops: pass params through (export worker handles runtime shape)
-        if (op.type === 'deleteBySelection') {
-          const masks: Record<string, Set<number>> = {}
-          for (const tm of op.masks) {
-            const indices = new Set<number>()
-            for (let i = 0; i < tm.mask.length; i++) {
-              if (tm.mask[i] === 1)
-                indices.add(i)
-            }
-            masks[tm.tileId] = indices
-          }
-          return { type: op.type, params: { masks }, timestamp: e.timestamp }
-        }
-        // For keepByAABB, filterByClassification, filterByRange: export worker reads
-        // params by field name at runtime, so pass the operation object directly
-        return { type: op.type, params: op, timestamp: e.timestamp }
-      }) as unknown as import('@/features/viewer/editor/edit-log-types').EditLogEntry[],
-      onProgress: (p) => {
-        updateExportProgress({
-          phase: p.phase,
-          pointsProcessed: p.pointsProcessed,
-          totalPoints: p.totalPoints,
-          bytesWritten: p.bytesWritten,
-        })
-      },
-      onComplete: () => {
-        setExporting(false)
-        exportSessionRef.current = null
-      },
-      onError: () => {
-        setExporting(false)
-        exportSessionRef.current = null
-      },
-    })
-  }, [setExporting, updateExportProgress])
-
-  const handleExportCancel = useCallback(() => {
-    exportSessionRef.current?.cancel()
-    exportSessionRef.current = null
-    setExporting(false)
-  }, [setExporting])
-
-  // Sync budget/preset changes to scheduler at runtime
-  useEffect(() => {
-    const scheduler = schedulerRef.current
-    if (!scheduler)
-      return
-    scheduler.setConfig({ pointBudget })
-    triggerSchedulerUpdate()
-  }, [pointBudget, triggerSchedulerUpdate])
-
-  useEffect(() => {
-    const scheduler = schedulerRef.current
-    if (!scheduler)
-      return
-    scheduler.setQuality(qualityPreset)
-    triggerSchedulerUpdate()
-  }, [qualityPreset, triggerSchedulerUpdate])
+  // File opener
+  if (!loaded && !loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-neutral-100" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+        <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-neutral-300 p-12">
+          <h1 className="text-2xl font-bold text-neutral-700">Open3D Point Cloud Viewer</h1>
+          <p className="text-sm text-neutral-500">Drag & drop a .las file, or click to browse</p>
+          <label className="cursor-pointer rounded bg-neutral-800 px-6 py-2 text-sm text-white hover:bg-neutral-700">
+            Browse Files
+            <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
+          </label>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-neutral-900">
-      {/* 3D Canvas with selection pointer events */}
-      <div
-        className="h-full w-full"
-        onPointerDown={selection.onPointerDown}
-        onPointerMove={selection.onPointerMove}
-        onPointerUp={selection.onPointerUp}
-      >
-        <ViewerCanvas
-          onRendererReady={handleRendererReady}
-          onRendererDispose={handleRendererDispose}
-        />
-      </div>
-
-      {/* Selection rubber-band overlay */}
-      {selection.dragRect && <SelectionOverlay rect={selection.dragRect} />}
-
-      {/* File opener — shown when no dataset loaded */}
-      {!descriptor && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/90">
-          <FileOpener onFileLoaded={handleFileLoaded} />
+    <div className="relative h-screen w-screen">
+      <div ref={containerRef} className="absolute inset-0" style={{ cursor: mode === 'select' ? 'crosshair' : 'default' }} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} />
+      <div ref={rectRef} className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
+      {loading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80">
+          <div className="flex flex-col items-center gap-3">
+            <div className="text-lg font-medium">
+              Loading
+              {' '}
+              {fileName}
+              ...
+            </div>
+            <div className="h-2 w-64 overflow-hidden rounded-full bg-neutral-200">
+              <div className="h-full rounded-full bg-neutral-800 transition-[width]" style={{ width: `${progress}%` }} />
+            </div>
+            <div className="text-sm text-neutral-500">
+              {progress}
+              %
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Progress overlay */}
-      <ProgressOverlay onCancel={handleCancel} />
-
-      {/* Export dialog */}
-      <ExportDialog onCancel={handleExportCancel} />
-
-      {/* Top toolbar */}
-      {descriptor && (
-        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
-          <Toolbar
-            onExport={handleExport}
-            onDeleteSelected={handleDeleteSelected}
-            onKeepSelected={handleKeepSelected}
-          />
+      {loaded && (
+        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-white/90 px-4 py-2 shadow-sm backdrop-blur-sm">
+          <select className="rounded border px-2 py-1 text-xs" value={colorMode} onChange={e => setColorMode(e.target.value)}>
+            {COLOR_MODES.map(m => <option key={m} value={m}>{COLOR_LABELS[m]}</option>)}
+          </select>
+          <div className="h-4 w-px bg-neutral-300" />
+          <label className="flex items-center gap-1 text-xs text-neutral-600">
+            Size
+            <input type="range" min="0.3" max="3" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
+          </label>
+          <div className="h-4 w-px bg-neutral-300" />
+          <button className={`rounded px-3 py-1 text-xs ${mode === 'select' ? 'bg-blue-600 text-white' : 'bg-neutral-200'}`} onClick={() => setMode(mode === 'navigate' ? 'select' : 'navigate')}>
+            {mode === 'select' ? 'Select Mode' : 'Navigate'}
+          </button>
+          {selectedCount > 0 && (
+            <>
+              <span className="text-xs text-neutral-500">
+                {selectedCount.toLocaleString()}
+                {' '}
+                pts
+              </span>
+              <button className="rounded bg-red-600 px-2 py-1 text-xs text-white" onClick={() => handleDelete(false)}>Delete</button>
+              <button className="rounded bg-green-600 px-2 py-1 text-xs text-white" onClick={() => handleDelete(true)}>Keep</button>
+              <button className="rounded bg-neutral-200 px-2 py-1 text-xs" onClick={handleClear}>Clear</button>
+            </>
+          )}
+          <div className="h-4 w-px bg-neutral-300" />
+          <label className="cursor-pointer rounded bg-neutral-200 px-2 py-1 text-xs hover:bg-neutral-300">
+            Open
+            <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
+          </label>
         </div>
       )}
-
-      {/* Bottom status bar */}
-      {descriptor && (
-        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2">
-          <StatusBar />
+      {loaded && (
+        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-white/90 px-4 py-1.5 text-xs text-neutral-600 shadow-sm backdrop-blur-sm">
+          {fileName}
+          {' '}
+          ·
+          {pointCount.toLocaleString()}
+          {' '}
+          points
         </div>
       )}
     </div>

@@ -498,7 +498,7 @@ function buildResult(
 // Main indexing orchestrator — chooses path based on file size
 // ---------------------------------------------------------------------------
 
-async function indexFile(
+async function _indexFile(
   file: File,
   datasetId: string,
   requestId: string,

@@ -2,12 +2,12 @@ import type { Texture } from 'three'
 import {
   BufferAttribute,
   BufferGeometry,
+  GLSL3,
   Mesh,
   OrthographicCamera,
   RawShaderMaterial,
   Scene,
   Vector2,
-  GLSL3,
 } from 'three'
 import fragmentShader from './shaders/edl.frag.glsl?raw'
 import vertexShader from './shaders/fullscreen.vert.glsl?raw'

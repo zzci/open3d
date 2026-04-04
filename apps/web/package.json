@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.2.11",
+    "@deck.gl/layers": "^9.2.11",
     "@repo/shared": "workspace:*",
     "@tanstack/react-query": "^5",
     "@tanstack/react-router": "^1",
