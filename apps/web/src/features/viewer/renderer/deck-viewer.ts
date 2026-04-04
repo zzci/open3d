@@ -481,9 +481,9 @@ export class DeckViewer {
           },
           // Fixed pixel radius — does NOT scale with zoom
           radiusUnits: 'pixels' as any,
-          getRadius: this.config.pointSizeMultiplier,
-          radiusMinPixels: 1,
-          radiusMaxPixels: 10,
+          getRadius: this.config.pointSizeMultiplier * 0.5,
+          radiusMinPixels: 0,
+          radiusMaxPixels: 20,
           stroked: false,
           antialiasing: false,
           updateTriggers: {
