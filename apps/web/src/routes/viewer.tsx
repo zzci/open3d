@@ -1,10 +1,11 @@
 /* eslint-disable style/max-statements-per-line */
 import type { PointCloudData } from '@/features/viewer/renderer/deck-viewer'
+import type { EditOp } from '@/features/viewer/data/las-loader'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DeckViewer, computeColors } from '@/features/viewer/renderer/deck-viewer'
+import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
 import { applyOp, loadLAS, saveLAS } from '@/features/viewer/data/las-loader'
-import type { EditOp } from '@/features/viewer/data/las-loader'
+import { useI18n } from '@/features/viewer/hooks/use-i18n'
 
 export const Route = createFileRoute('/viewer')({
   component: ViewerPage,
@@ -20,15 +21,16 @@ const MAX_PTS = [
 ]
 
 const VIEWS = ['persp', 'top', 'bottom', 'front', 'back', 'right', 'left'] as const
-const COLOR_MODES = [
-  { v: 'rgb', l: 'RGB' },
-  { v: 'intensity', l: 'Intensity' },
-  { v: 'height', l: 'Height' },
-  { v: 'heightIntensity', l: 'Height+Int' },
-  { v: 'shading', l: 'Shading' },
-  { v: 'edl', l: 'Warm Light' },
-  { v: 'white', l: 'White' },
-]
+const VIEW_KEYS = { persp: 'persp', top: 'top', bottom: 'bottom', front: 'front', back: 'back', right: 'right', left: 'left' } as const
+const COLOR_MODE_KEYS = [
+  { v: 'rgb', k: 'rgb' },
+  { v: 'intensity', k: 'intensity' },
+  { v: 'height', k: 'height' },
+  { v: 'heightIntensity', k: 'heightInt' },
+  { v: 'shading', k: 'shading' },
+  { v: 'edl', k: 'warmLight' },
+  { v: 'white', k: 'white' },
+] as const
 
 type InteractionMode = 'navigate' | 'select' | 'eraser'
 interface SelectionInfo { bitmap: Uint8Array, selectedCount: number, m: Float64Array, rect: [number, number, number, number] }
@@ -72,6 +74,7 @@ function ViewerPage() {
   const [selectedCount, setSelectedCount] = useState(0)
   const [totalPoints, setTotalPoints] = useState(0)
   const [editCount, setEditCount] = useState(0)
+  const { t, toggle: toggleLang, lang } = useI18n()
   const [eraserSize, setEraserSize] = useState(20) // pixel radius
   const [eraserPos, setEraserPos] = useState<{ x: number, y: number } | null>(null)
   const erasingRef = useRef(false)
@@ -105,7 +108,7 @@ function ViewerPage() {
 
   const doLoad = useCallback(async (file: File, mp: number) => {
     setLoading(true)
-    setLoadText(`Loading ${file.name}...`)
+    setLoadText(`${t('loading')} ${file.name}...`)
     setProgress(0)
     try {
       const pd = await loadLAS(file, mp, (pct) => {
@@ -133,7 +136,7 @@ function ViewerPage() {
     setHasSelection(false)
     setFileName(file.name)
     const pd = await doLoad(file, maxPoints)
-    if (pd) showToast(`Loaded ${file.name} (${pd.count.toLocaleString()} pts)`, 'success')
+    if (pd) showToast(`${t('loaded')} ${file.name} (${pd.count.toLocaleString()} ${t('pts_suffix')})`, 'success')
   }, [maxPoints, doLoad, showToast])
 
   const handleMaxPointsChange = useCallback(async (v: number) => {
@@ -255,20 +258,20 @@ function ViewerPage() {
     viewerRef.current?.setHighlight(null)
     viewerRef.current?.updateData(newData)
     setEditCount(opsRef.current.length)
-    showToast(`${keep ? 'Kept, removed' : 'Deleted'} ${removed.toLocaleString()} pts`, 'success')
+    showToast(`${keep ? t('keptRemoved') : t('deleted')} ${removed.toLocaleString()} ${t('pts_suffix')}`, 'success')
     selectionRef.current = null
     setHasSelection(false)
   }, [data, showToast])
 
   // Undo
   const handleUndo = useCallback(() => {
-    if (!opsRef.current.length || !baseDataRef.current) { showToast('Nothing to undo', 'info'); return }
+    if (!opsRef.current.length || !baseDataRef.current) { showToast(t('nothingToUndo'), 'info'); return }
     opsRef.current.pop()
     const derived = deriveData(baseDataRef.current, opsRef.current)
     setData(derived)
     viewerRef.current?.updateData(derived)
     setEditCount(opsRef.current.length)
-    showToast('Undone', 'success')
+    showToast(t('undone'), 'success')
   }, [deriveData, showToast])
 
   // Eraser — removes points within radius of cursor position
@@ -340,20 +343,20 @@ function ViewerPage() {
   const onEraserUp = useCallback(() => {
     if (erasingRef.current) {
       erasingRef.current = false
-      showToast(`Erased (${editCount + 1} edits)`, 'success')
+      showToast(`${t('erased')} (${editCount + 1} ${t('edits')})`, 'success')
     }
   }, [editCount, showToast])
 
   // Save
   const handleSave = useCallback(async () => {
     const file = fileRef.current
-    if (!file || !opsRef.current.length) { showToast('No edits', 'info'); return }
+    if (!file || !opsRef.current.length) { showToast(t('noEdits'), 'info'); return }
     setLoading(true)
-    setLoadText('Saving...')
+    setLoadText(`${t('saving')}...`)
     try {
       const blob = await saveLAS(file, opsRef.current, (pct) => {
         setProgress(pct)
-        setLoadText(`Saving... ${(pct * 100) | 0}%`)
+        setLoadText(`${t('saving')}... ${(pct * 100) | 0}%`)
       })
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
       const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
@@ -369,7 +372,7 @@ function ViewerPage() {
           const writable = await handle.createWritable()
           await writable.write(blob)
           await writable.close()
-          showToast(`Saved ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+          showToast(`${t('saved')} ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
         }
         catch (err: unknown) {
           // User cancelled the picker
@@ -385,11 +388,11 @@ function ViewerPage() {
         a.download = suggestedName
         a.click()
         URL.revokeObjectURL(url)
-        showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+        showToast(`${t('saved')} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
       }
     }
     catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Save failed', 'error')
+      showToast(e instanceof Error ? e.message : t('saveFailed'), 'error')
     }
     finally {
       setLoading(false)
@@ -500,16 +503,16 @@ function ViewerPage() {
             {/* View presets */}
             {VIEWS.map(v => (
               <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-[#58a6ff] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setViewPreset(v)}>
-                {v}
+                {t(VIEW_KEYS[v])}
               </button>
             ))}
 
             <div className="h-4 w-px bg-[#30363d]" />
 
             {/* Nav/Select/Eraser mode */}
-            <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-[#30363d]' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('navigate')}>Nav</button>
-            <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-[#d63384] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('select')}>Sel</button>
-            <button className={`rounded px-2 py-0.5 ${mode === 'eraser' ? 'bg-[#f85149] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode(mode === 'eraser' ? 'navigate' : 'eraser')}>Eraser</button>
+            <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-[#30363d]' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('navigate')}>{t('nav')}</button>
+            <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-[#d63384] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode('select')}>{t('sel')}</button>
+            <button className={`rounded px-2 py-0.5 ${mode === 'eraser' ? 'bg-[#f85149] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setMode(mode === 'eraser' ? 'navigate' : 'eraser')}>{t('eraser')}</button>
             {mode === 'eraser' && (
               <>
                 <input type="range" min="5" max="100" step="5" value={eraserSize} onChange={e => setEraserSize(Number(e.target.value))} className="w-14" />
@@ -532,7 +535,7 @@ function ViewerPage() {
 
             {/* Color mode */}
             <select value={colorMode} onChange={e => setColorMode(e.target.value)} className="rounded border border-[#30363d] bg-[#21262d] px-1 py-0.5 text-[#c9d1d9]">
-              {COLOR_MODES.map(m => <option key={m.v} value={m.v}>{data?.isGrayscale && m.v === 'rgb' ? 'Intensity' : m.l}</option>)}
+              {COLOR_MODE_KEYS.map(m => <option key={m.v} value={m.v}>{data?.isGrayscale && m.v === 'rgb' ? t('intensity') : t(m.k)}</option>)}
             </select>
 
             <div className="flex-1" />
@@ -541,27 +544,29 @@ function ViewerPage() {
             {hasSelection && (
               <>
                 <span className="text-[#ff9944]">~{selectedCount.toLocaleString()}</span>
-                <button className="rounded bg-[#f85149] px-2 py-0.5 text-white" onClick={() => handleDelete(false)}>Delete</button>
-                <button className="rounded bg-[#3fb950] px-2 py-0.5 text-white" onClick={() => handleDelete(true)}>Keep</button>
-                <button className="rounded bg-[#30363d] px-2 py-0.5" onClick={clearSelection}>Esc</button>
+                <button className="rounded bg-[#f85149] px-2 py-0.5 text-white" onClick={() => handleDelete(false)}>{t('delete')}</button>
+                <button className="rounded bg-[#3fb950] px-2 py-0.5 text-white" onClick={() => handleDelete(true)}>{t('keep')}</button>
+                <button className="rounded bg-[#30363d] px-2 py-0.5" onClick={clearSelection}>{t('clear')}</button>
               </>
             )}
 
             {/* Edit actions */}
-            {editCount > 0 && <span className="text-[#ffcc44]">{editCount} edit{editCount > 1 ? 's' : ''}</span>}
-            <button className="rounded bg-[#21262d] px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>Undo</button>
-            <button className="rounded bg-[#58a6ff] px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>Save</button>
+            {editCount > 0 && <span className="text-[#ffcc44]">{editCount} {t('edits')}</span>}
+            <button className="rounded bg-[#21262d] px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>{t('undo')}</button>
+            <button className="rounded bg-[#58a6ff] px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>{t('save')}</button>
           </>
         )}
+        <div className="h-4 w-px bg-[#30363d]" />
+        <button className="rounded bg-[#21262d] px-2 py-0.5 hover:bg-[#30363d]" onClick={toggleLang}>{t('lang')}</button>
       </div>
 
       {/* Status bar */}
       {fileName && (
         <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-3 rounded-lg bg-[#161b22]/90 px-4 py-1.5 text-xs text-[#8b949e] shadow-sm backdrop-blur-sm">
           <span>{fileName}</span>
-          <span>Total: {totalPoints.toLocaleString()}</span>
-          <span>Display: {data?.count.toLocaleString() || '-'}</span>
-          {editCount > 0 && <span className="text-[#ffcc44]">Unsaved: {editCount}</span>}
+          <span>{t('total')}: {totalPoints.toLocaleString()}</span>
+          <span>{t('display')}: {data?.count.toLocaleString() || '-'}</span>
+          {editCount > 0 && <span className="text-[#ffcc44]">{t('unsaved')}: {editCount}</span>}
         </div>
       )}
 
