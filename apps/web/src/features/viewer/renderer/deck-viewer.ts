@@ -317,10 +317,9 @@ export class DeckViewer {
   setData(data: PointCloudData): void {
     this.data = data
     this.colorBuf = new Uint8Array(data.count * 3)
-    this.normalsBuf = new Float32Array(data.count * 3) // cached, not re-allocated
+    this.normalsBuf = new Float32Array(data.count * 3)
     this.highlightBuf = null
 
-    // Cache grid (only rebuild when data changes)
     const { lines, axes } = buildGrid(data.bounds)
     this.gridLines = lines
     this.axesLines = axes
@@ -337,6 +336,17 @@ export class DeckViewer {
     }
     this.deck.setProps({ initialViewState: this.viewState as any })
     this.recomputeColors()
+    this.updateLayers()
+  }
+
+  /** Update point data without resetting camera — used after edit operations */
+  updateData(data: PointCloudData): void {
+    this.data = data
+    this.colorBuf = new Uint8Array(data.count * 3)
+    this.normalsBuf = new Float32Array(data.count * 3)
+    this.highlightBuf = null
+    this.recomputeColors()
+    this.colorVersion++
     this.updateLayers()
   }
 

@@ -99,7 +99,7 @@ function ViewerPage() {
       const derived = deriveData(pd, opsRef.current)
       setData(derived)
       setTotalPoints(pd.count)
-      viewerRef.current?.setData(derived)
+      viewerRef.current?.updateData(derived)
       setViewPreset('persp')
       return derived
     }
@@ -207,7 +207,7 @@ function ViewerPage() {
     const { result, removedCount } = applyOp(data, op)
     setData(result)
     viewerRef.current?.setHighlight(null)
-    viewerRef.current?.setData(result)
+    viewerRef.current?.updateData(result)
     setEditCount(opsRef.current.length)
     showToast(`${keep ? 'Kept, removed' : 'Deleted'} ${removedCount.toLocaleString()} pts`, 'success')
     selectionRef.current = null
@@ -220,7 +220,7 @@ function ViewerPage() {
     opsRef.current.pop()
     const derived = deriveData(baseDataRef.current, opsRef.current)
     setData(derived)
-    viewerRef.current?.setData(derived)
+    viewerRef.current?.updateData(derived)
     setEditCount(opsRef.current.length)
     showToast('Undone', 'success')
   }, [deriveData, showToast])
