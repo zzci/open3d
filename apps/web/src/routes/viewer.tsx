@@ -283,7 +283,9 @@ function ViewerPage() {
       const a = document.createElement('a')
       a.href = url
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      a.download = fileName?.replace(/\.las$/i, `_${ts}.las`) || `edited_${ts}.las`
+      // Strip any existing timestamp suffix to prevent accumulation
+      const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
+      a.download = `${baseName}_${ts}.las`
       a.click()
       URL.revokeObjectURL(url)
       showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
