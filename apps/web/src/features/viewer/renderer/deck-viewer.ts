@@ -5,7 +5,7 @@
  * No custom shaders, no FBO management, no GLSL version issues.
  */
 
-import { Deck, OrbitView } from '@deck.gl/core'
+import { COORDINATE_SYSTEM, Deck, OrbitView } from '@deck.gl/core'
 import { LineLayer, PointCloudLayer } from '@deck.gl/layers'
 
 // ---------------------------------------------------------------------------
@@ -430,6 +430,7 @@ export class DeckViewer {
       layers: [
         new LineLayer({
           id: 'grid',
+          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
           data: this.gridLines,
           getSourcePosition: ((d: GridLine) => d.s) as any,
           getTargetPosition: ((d: GridLine) => d.t) as any,
@@ -439,6 +440,7 @@ export class DeckViewer {
         }),
         new LineLayer({
           id: 'axes',
+          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
           data: this.axesLines,
           getSourcePosition: ((d: GridLine) => d.s) as any,
           getTargetPosition: ((d: GridLine) => d.t) as any,
@@ -448,6 +450,7 @@ export class DeckViewer {
         }),
         new PointCloudLayer({
           id: 'points',
+          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
           data: {
             length: this.data.count,
             attributes: {
@@ -456,10 +459,10 @@ export class DeckViewer {
               getNormal: { value: this.normalsBuf, size: 3 },
             },
           },
-          pointSize: this.config.pointSizeMultiplier * 2,
-          sizeUnits: 'common' as const,
+          // radiusPixels: small radius = fewer fragments = much faster
+          // 6M points × π×r² pixels each: r=1 → 19M frags, r=3 → 170M frags
+          radiusPixels: this.config.pointSizeMultiplier,
           material: false,
-          // Tell deck.gl which attributes changed — avoids re-uploading positions
           updateTriggers: {
             getColor: this.colorVersion,
           },
