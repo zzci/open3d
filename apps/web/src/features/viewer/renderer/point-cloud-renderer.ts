@@ -161,6 +161,21 @@ export class PointCloudRenderer {
     }
   }
 
+  /** Apply per-tile selection masks and toggle selection highlight */
+  updateSelection(selectionMap: Map<string, Uint8Array>): void {
+    const active = selectionMap.size > 0 ? 1 : 0
+    for (const [nodeId, tile] of this.tiles) {
+      const mask = selectionMap.get(nodeId) ?? null
+      tile.updateSelectionMask(mask)
+      tile.updateUniforms({ selectionActive: active })
+    }
+  }
+
+  /** Expose tiles map for coarse AABB filtering in selection pipeline */
+  getTiles(): ReadonlyMap<string, TileMesh> {
+    return this.tiles
+  }
+
   // -----------------------------------------------------------------------
   // Stats
   // -----------------------------------------------------------------------

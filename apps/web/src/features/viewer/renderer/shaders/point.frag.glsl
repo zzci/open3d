@@ -1,12 +1,14 @@
 precision highp float;
 
 uniform int uColorMode;
+uniform int uSelectionActive;
 uniform sampler2D uClassificationPalette;
 
 varying vec3 vColor;
 varying float vIntensity;
 varying float vClassification;
 varying float vHeightNorm;
+varying float vSelected;
 
 // Blue → Cyan → Green → Yellow → Red ramp
 vec3 heatmap(float t) {
@@ -29,6 +31,12 @@ void main() {
   // Discard corners for round points
   vec2 coord = gl_PointCoord * 2.0 - 1.0;
   if (dot(coord, coord) > 1.0) discard;
+
+  // Selected points override to yellow
+  if (uSelectionActive == 1 && vSelected > 0.5) {
+    gl_FragColor = vec4(1.0, 0.92, 0.23, 1.0); // bright yellow
+    return;
+  }
 
   vec3 color;
 

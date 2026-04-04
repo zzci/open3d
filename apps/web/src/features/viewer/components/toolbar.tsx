@@ -37,6 +37,10 @@ export function Toolbar() {
   const setPointSize = useViewerStore(s => s.setPointSize)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
   const setQualityPreset = useViewerStore(s => s.setQualityPreset)
+  const selectionMode = useViewerStore(s => s.selectionMode)
+  const setSelectionMode = useViewerStore(s => s.setSelectionMode)
+  const selectedPointCount = useViewerStore(s => s.selectedPointCount)
+  const clearSelection = useViewerStore(s => s.clearSelection)
 
   return (
     <div className="flex items-center gap-4 rounded-md bg-background/80 px-3 py-2 shadow-sm backdrop-blur-sm">
@@ -115,6 +119,52 @@ export function Toolbar() {
             {QUALITY_LABELS[preset]}
           </Button>
         ))}
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
+      {/* Selection mode */}
+      <div className="flex items-center gap-1">
+        <Button
+          variant={selectionMode ? 'default' : 'ghost'}
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => setSelectionMode(!selectionMode)}
+        >
+          Select
+        </Button>
+        {selectedPointCount > 0 && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-destructive"
+              onClick={clearSelection}
+            >
+              Clear
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-destructive"
+              onClick={() => {
+                // Delete selected — store action stub for FEAT-012
+              }}
+            >
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                // Keep selected — store action stub for FEAT-012
+              }}
+            >
+              Keep
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )

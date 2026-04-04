@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
+import { useSelection } from '../hooks/use-selection'
 import { PointCloudRenderer } from '../renderer/point-cloud-renderer'
 import { useViewerStore } from '../store'
+import { SelectionOverlay } from './selection-overlay'
 
 interface ViewerCanvasProps {
   onRendererReady: (renderer: PointCloudRenderer) => void
@@ -12,6 +14,8 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const rendererRef = useRef<PointCloudRenderer | null>(null)
   const colorMode = useViewerStore(s => s.colorMode)
   const pointSize = useViewerStore(s => s.pointSize)
+  const selectionMap = useViewerStore(s => s.selectionMap)
+  const selectionMode = useViewerStore(s => s.selectionMode)
 
   // Mount renderer
   useEffect(() => {
@@ -42,10 +46,27 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     rendererRef.current?.updatePointSize(pointSize)
   }, [pointSize])
 
+  // Sync selection highlight to renderer
+  useEffect(() => {
+    rendererRef.current?.updateSelection(selectionMap)
+  }, [selectionMap])
+
+  // Selection hook
+  const { dragRect, onPointerDown, onPointerMove, onPointerUp } = useSelection(rendererRef.current)
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 h-full w-full"
-    />
+    <div
+      className="absolute inset-0"
+      style={{ cursor: selectionMode ? 'crosshair' : 'default' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 h-full w-full"
+      />
+      <SelectionOverlay rect={dragRect} />
+    </div>
   )
 }

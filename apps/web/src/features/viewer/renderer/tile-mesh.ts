@@ -37,6 +37,7 @@ export interface PointUniforms {
   colorMode: ColorMode
   heightMin: number
   heightMax: number
+  selectionActive?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,13 @@ export class TileMesh {
       )
     }
 
+    // Selection attribute — default all zeros (not selected)
+    const selectionData = new Float32Array(data.pointCount)
+    this.geometry.setAttribute(
+      'aSelected',
+      new BufferAttribute(selectionData, 1),
+    )
+
     this.points = new Points(this.geometry, this.material)
     this.points.frustumCulled = false // scheduler handles culling
   }
@@ -112,6 +120,23 @@ export class TileMesh {
       u.uHeightMin!.value = uniforms.heightMin
     if (uniforms.heightMax !== undefined)
       u.uHeightMax!.value = uniforms.heightMax
+    if (uniforms.selectionActive !== undefined)
+      u.uSelectionActive!.value = uniforms.selectionActive
+  }
+
+  /** Update per-point selection mask from Uint8Array bitmask */
+  updateSelectionMask(mask: Uint8Array | null): void {
+    const attr = this.geometry.getAttribute('aSelected') as BufferAttribute
+    const arr = attr.array as Float32Array
+    if (mask && mask.length === arr.length) {
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = mask[i]!
+      }
+    }
+    else {
+      arr.fill(0)
+    }
+    attr.needsUpdate = true
   }
 
   /** Dispose all GPU resources — MUST be called on eviction */
@@ -134,6 +159,7 @@ export class TileMesh {
         uColorMode: { value: uniforms.colorMode },
         uHeightMin: { value: uniforms.heightMin },
         uHeightMax: { value: uniforms.heightMax },
+        uSelectionActive: { value: uniforms.selectionActive ?? 0 },
         uClassificationPalette: { value: getClassificationPalette() },
       },
       depthWrite: true,
