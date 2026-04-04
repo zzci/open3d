@@ -1,9 +1,10 @@
 # FEAT-006 Three.js WebGL2 point cloud renderer
 
-- **status**: pending
+- **status**: done
 - **priority**: P1
-- **owner**: (unassigned)
+- **owner**: roy
 - **createdAt**: 2026-04-04 01:30
+- **completedAt**: 2026-04-04
 
 ## Description
 

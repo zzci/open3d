@@ -1,11 +1,8 @@
 # Changelog
 
-## 2026-04-04 01:35 [progress]
+## 2026-04-04 01:55 [progress]
 
-Merged FEAT-004, FEAT-005, FEAT-009:
-- FEAT-004: Tile decode Worker + worker pool (2-4 instances)
-- FEAT-005: Client tile scheduler with LOD policy, frustum culling, point budget
-- FEAT-009: Local indexing Worker — LAS/LAZ → octree with LOD, OPFS storage, progress/cancel
+FEAT-006: Three.js WebGL2 point cloud renderer. Tile-based rendering with custom ShaderMaterial, 5 color modes (RGB, intensity, height, classification, white) as GPU uniforms — no CPU color rebuild. OrbitControls, ResizeObserver, FPS tracking. Classification palette via 1D texture lookup. Proper GPU resource disposal on tile eviction.
 
 ## 2026-04-04 01:20 [progress]
 
