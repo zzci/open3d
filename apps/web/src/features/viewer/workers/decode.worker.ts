@@ -28,7 +28,13 @@ const initPromise = initLazPerf()
 
 async function initLazPerf(): Promise<void> {
   const { create } = await import('laz-perf')
-  lazPerf = (await create()) as unknown as LazPerfModule
+  lazPerf = (await create({
+    locateFile: (file: string) => {
+      if (file.endsWith('.wasm'))
+        return '/laz-perf.wasm'
+      return file
+    },
+  })) as unknown as LazPerfModule
 }
 
 // ---------------------------------------------------------------------------
