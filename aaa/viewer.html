@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>3D Editor</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+  #info {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    color: #fff; background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 6px;
+    font-size: 13px; z-index: 100; pointer-events: none;
+  }
+  #toolbar {
+    position: absolute; top: 10px; right: 10px; z-index: 100;
+    display: flex; gap: 6px;
+  }
+  #toolbar button {
+    padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer;
+    font-size: 13px; background: #444; color: #fff;
+  }
+  #toolbar button:hover { background: #666; }
+  #toolbar button.active { background: #4a9eff; }
+</style>
+</head>
+<body>
+<div id="info">Loading model...</div>
+<div id="toolbar">
+  <button id="btn-rotate" class="active" title="Rotate">Rotate</button>
+  <button id="btn-translate" title="Move">Move</button>
+  <button id="btn-scale" title="Scale">Scale</button>
+  <button id="btn-wireframe" title="Wireframe">Wireframe</button>
+  <button id="btn-reset" title="Reset View">Reset</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x222222);
+
+// Grid
+const grid = new THREE.GridHelper(200, 50, 0x444444, 0x333333);
+scene.add(grid);
+
+// Axes
+scene.add(new THREE.AxesHelper(50));
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true;
+
+const transform = new TransformControls(camera, renderer.domElement);
+transform.addEventListener('dragging-changed', e => orbit.enabled = !e.value);
+scene.add(transform);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const d1 = new THREE.DirectionalLight(0xffffff, 0.8);
+d1.position.set(10, 20, 15);
+scene.add(d1);
+const d2 = new THREE.DirectionalLight(0xffffff, 0.3);
+d2.position.set(-10, -10, -10);
+scene.add(d2);
+
+let model = null;
+let initialCamPos = null;
+let isWireframe = false;
+
+// Load OBJ
+const loader = new OBJLoader();
+loader.load('/model/scene.obj', (obj) => {
+  model = obj;
+
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3()).length();
+
+  model.position.sub(center);
+
+  model.traverse(child => {
+    if (child.isMesh) {
+      child.material = new THREE.MeshStandardMaterial({
+        color: 0x6699cc, metalness: 0.2, roughness: 0.7, side: THREE.DoubleSide
+      });
+    }
+  });
+
+  camera.position.set(size * 0.7, size * 0.5, size * 0.7);
+  camera.near = size * 0.0001;
+  camera.far = size * 100;
+  camera.updateProjectionMatrix();
+  orbit.target.set(0, 0, 0);
+  orbit.update();
+  initialCamPos = camera.position.clone();
+
+  transform.attach(model);
+  scene.add(model);
+
+  const s = box.getSize(new THREE.Vector3());
+  document.getElementById('info').textContent =
+    `Size: ${s.x.toFixed(1)} × ${s.y.toFixed(1)} × ${s.z.toFixed(1)} | ${(obj.children.reduce((a,c) => a + (c.geometry?.attributes?.position?.count || 0), 0)).toLocaleString()} vertices`;
+}, (xhr) => {
+  if (xhr.total) {
+    document.getElementById('info').textContent = `Loading... ${(xhr.loaded/xhr.total*100).toFixed(0)}%`;
+  }
+}, (err) => {
+  document.getElementById('info').textContent = 'Error: ' + err.message;
+});
+
+// Toolbar
+const btnRotate = document.getElementById('btn-rotate');
+const btnTranslate = document.getElementById('btn-translate');
+const btnScale = document.getElementById('btn-scale');
+const btnWireframe = document.getElementById('btn-wireframe');
+const btnReset = document.getElementById('btn-reset');
+
+function setMode(mode) {
+  transform.setMode(mode);
+  btnRotate.classList.toggle('active', mode === 'rotate');
+  btnTranslate.classList.toggle('active', mode === 'translate');
+  btnScale.classList.toggle('active', mode === 'scale');
+}
+
+btnRotate.onclick = () => setMode('rotate');
+btnTranslate.onclick = () => setMode('translate');
+btnScale.onclick = () => setMode('scale');
+btnWireframe.onclick = () => {
+  isWireframe = !isWireframe;
+  btnWireframe.classList.toggle('active', isWireframe);
+  if (model) model.traverse(c => { if (c.isMesh) c.material.wireframe = isWireframe; });
+};
+btnReset.onclick = () => {
+  if (model && initialCamPos) {
+    camera.position.copy(initialCamPos);
+    orbit.target.set(0, 0, 0);
+    orbit.update();
+  }
+};
+
+// Keyboard shortcuts
+window.addEventListener('keydown', e => {
+  if (e.key === 'r') setMode('rotate');
+  if (e.key === 'g') setMode('translate');
+  if (e.key === 's') setMode('scale');
+  if (e.key === 'z') { isWireframe = !isWireframe; btnWireframe.click(); }
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  orbit.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

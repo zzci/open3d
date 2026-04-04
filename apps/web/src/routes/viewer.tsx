@@ -357,8 +357,8 @@ function ViewerPage() {
 
           {/* Point size */}
           <span className="text-neutral-500">Size</span>
-          <input type="range" min="1" max="8" step="1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
-          <span className="tabular-nums text-neutral-500">{pointSize}px</span>
+          <input type="range" min="0.5" max="5" step="0.5" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
+          <span className="tabular-nums text-neutral-500">{pointSize}x</span>
 
           {/* Max points */}
           <span className="text-neutral-500">Pts</span>
