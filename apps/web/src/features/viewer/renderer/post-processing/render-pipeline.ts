@@ -13,9 +13,9 @@ import {
   WebGLRenderTarget,
 } from 'three'
 import { EdlPass } from './edl-pass'
-import { SsaoPass } from './ssao-pass'
 import compositeFragShader from './shaders/composite.frag.glsl?raw'
 import fullscreenVertShader from './shaders/fullscreen.vert.glsl?raw'
+import { SsaoPass } from './ssao-pass'
 
 // ---------------------------------------------------------------------------
 // RenderPipeline — multi-pass rendering with EDL post-processing and MSAA
@@ -44,6 +44,7 @@ export class RenderPipeline {
   private _edlEnabled = true
   private _ssaoEnabled = false
   private _msaaSamples: number
+  private _resizing = false
 
   constructor(width: number, height: number, options?: Partial<RenderPipelineOptions>) {
     this.width = width
@@ -118,6 +119,9 @@ export class RenderPipeline {
 
   /** Render the full pipeline */
   render(webglRenderer: WebGLRenderer, scene: Scene, camera: PerspectiveCamera): void {
+    if (this._resizing)
+      return
+
     const needsFbo = this._edlEnabled || this._ssaoEnabled
 
     if (!needsFbo) {
@@ -202,20 +206,32 @@ export class RenderPipeline {
     if (this.width === width && this.height === height)
       return
 
+    this._resizing = true
     this.width = width
     this.height = height
 
-    this.sceneTarget.dispose()
-    this.sceneTarget = this.createSceneTarget(width, height)
+    // Create new targets before disposing old ones (atomic swap)
+    const newScene = this.createSceneTarget(width, height)
+    const newEdl = new WebGLRenderTarget(width, height)
+    const newSsao = new WebGLRenderTarget(width, height)
+    const newSsaoBlur = new WebGLRenderTarget(width, height)
 
-    this.edlTarget.dispose()
-    this.edlTarget = new WebGLRenderTarget(width, height)
+    const oldScene = this.sceneTarget
+    const oldEdl = this.edlTarget
+    const oldSsao = this.ssaoTarget
+    const oldSsaoBlur = this.ssaoBlurTarget
 
-    this.ssaoTarget.dispose()
-    this.ssaoTarget = new WebGLRenderTarget(width, height)
+    this.sceneTarget = newScene
+    this.edlTarget = newEdl
+    this.ssaoTarget = newSsao
+    this.ssaoBlurTarget = newSsaoBlur
 
-    this.ssaoBlurTarget.dispose()
-    this.ssaoBlurTarget = new WebGLRenderTarget(width, height)
+    oldScene.dispose()
+    oldEdl.dispose()
+    oldSsao.dispose()
+    oldSsaoBlur.dispose()
+
+    this._resizing = false
   }
 
   dispose(): void {

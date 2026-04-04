@@ -1,3 +1,4 @@
+import type { RenderModeId } from '../renderer/render-modes'
 import type { DpiScale, QualityPreset } from '../store'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -11,7 +12,6 @@ import { Slider } from '@/shared/components/ui/slider'
 import { formatMillions } from '../lib/format'
 import { COLOR_MODE_LABELS, ColorMode } from '../renderer/color-modes'
 import { PALETTE_LABELS, PaletteId } from '../renderer/palettes/palette-registry'
-import type { RenderModeId } from '../renderer/render-modes'
 import { RENDER_MODES } from '../renderer/render-modes'
 import { useViewerStore } from '../store'
 
@@ -71,6 +71,8 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
   const edlStrength = useViewerStore(s => s.edlStrength)
   const setEdlEnabled = useViewerStore(s => s.setEdlEnabled)
   const setEdlStrength = useViewerStore(s => s.setEdlStrength)
+  const intensityNormMode = useViewerStore(s => s.intensityNormMode)
+  const setIntensityNormMode = useViewerStore(s => s.setIntensityNormMode)
   const selectionMode = useViewerStore(s => s.selectionMode)
   const setSelectionMode = useViewerStore(s => s.setSelectionMode)
   const selectedPointCount = useViewerStore(s => s.selectedPointCount)
@@ -242,6 +244,20 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
             </span>
           </>
         )}
+      </div>
+
+      <div className="h-4 w-px bg-border" />
+
+      {/* Intensity normalization */}
+      <div className="flex items-center gap-1">
+        <Button
+          variant={intensityNormMode === 'histogram' ? 'default' : 'ghost'}
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => setIntensityNormMode(intensityNormMode === 'linear' ? 'histogram' : 'linear')}
+        >
+          {intensityNormMode === 'histogram' ? 'Hist EQ' : 'Linear'}
+        </Button>
       </div>
 
       <div className="h-4 w-px bg-border" />

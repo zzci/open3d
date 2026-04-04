@@ -13,11 +13,10 @@ import {
   UnsignedByteType,
   Vector2,
   Vector3,
-  WebGLRenderTarget,
 } from 'three'
+import fullscreenVertShader from './shaders/fullscreen.vert.glsl?raw'
 import ssaoBlurFragShader from './shaders/ssao-blur.frag.glsl?raw'
 import ssaoFragShader from './shaders/ssao.frag.glsl?raw'
-import fullscreenVertShader from './shaders/fullscreen.vert.glsl?raw'
 
 // ---------------------------------------------------------------------------
 // SSAO parameters
@@ -132,18 +131,18 @@ export class SsaoPass {
       vertexShader: fullscreenVertShader,
       fragmentShader: ssaoFragShader,
       uniforms: {
-        uDepthTexture: { value: null as Texture | null },
-        uNoiseTexture: { value: this.noiseTexture },
-        uTexelSize: { value: new Vector2() },
-        uNoiseScale: { value: new Vector2() },
-        uRadius: { value: DEFAULT_SSAO_PARAMS.radius },
-        uIntensity: { value: DEFAULT_SSAO_PARAMS.intensity },
-        uBias: { value: 0.025 },
-        uNear: { value: 0.1 },
-        uFar: { value: 10_000 },
-        uProjection: { value: new Matrix4() },
-        uInverseProjection: { value: new Matrix4() },
-        uSampleCount: { value: DEFAULT_SSAO_PARAMS.samples },
+        'uDepthTexture': { value: null as Texture | null },
+        'uNoiseTexture': { value: this.noiseTexture },
+        'uTexelSize': { value: new Vector2() },
+        'uNoiseScale': { value: new Vector2() },
+        'uRadius': { value: DEFAULT_SSAO_PARAMS.radius },
+        'uIntensity': { value: DEFAULT_SSAO_PARAMS.intensity },
+        'uBias': { value: 0.025 },
+        'uNear': { value: 0.1 },
+        'uFar': { value: 10_000 },
+        'uProjection': { value: new Matrix4() },
+        'uInverseProjection': { value: new Matrix4() },
+        'uSampleCount': { value: DEFAULT_SSAO_PARAMS.samples },
         'uKernel[0]': kernelUniform[0],
         'uKernel[1]': kernelUniform[1],
         'uKernel[2]': kernelUniform[2],

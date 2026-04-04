@@ -20,6 +20,7 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
   const dpiScale = useViewerStore(s => s.dpiScale)
+  const intensityNormMode = useViewerStore(s => s.intensityNormMode)
   const edlEnabled = useViewerStore(s => s.edlEnabled)
   const edlRadius = useViewerStore(s => s.edlRadius)
   const edlStrength = useViewerStore(s => s.edlStrength)
@@ -81,6 +82,11 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   useEffect(() => {
     rendererRef.current?.updateSelection(selectionMap)
   }, [selectionMap])
+
+  // Sync intensity normalization mode
+  useEffect(() => {
+    rendererRef.current?.updateIntensityNormMode(intensityNormMode)
+  }, [intensityNormMode])
 
   // Sync DPI scale
   useEffect(() => {
