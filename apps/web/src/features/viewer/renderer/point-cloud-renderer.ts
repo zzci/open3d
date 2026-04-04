@@ -1,8 +1,7 @@
 import type { TileData } from '../data/types'
-import type { IntensityNormMode } from '../store'
-import type { EdlParams } from './post-processing/edl-pass'
-import type { SsaoParams } from './post-processing/ssao-pass'
+import type { DpiScale, IntensityNormMode } from '../store'
 import type { PaletteId } from './palettes/palette-registry'
+import type { EdlParams } from './post-processing/edl-pass'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -11,8 +10,8 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorMode } from './color-modes'
-import { RenderPipeline } from './post-processing/render-pipeline'
 import { disposePalettes, getPaletteTexture } from './palettes/palette-registry'
+import { RenderPipeline } from './post-processing/render-pipeline'
 import { disposeSharedResources, TileMesh } from './tile-mesh'
 
 // ---------------------------------------------------------------------------
@@ -45,6 +44,13 @@ class FpsTracker {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-downscale: tracks consecutive low-FPS frames
+// ---------------------------------------------------------------------------
+
+const LOW_FPS_THRESHOLD = 20
+const LOW_FPS_DURATION_MS = 3000
+
+// ---------------------------------------------------------------------------
 // Renderer configuration
 // ---------------------------------------------------------------------------
 
@@ -54,6 +60,7 @@ export interface RendererConfig {
   intensityNormMode: IntensityNormMode
   pointShape: PointShape
   blendMode: BlendMode
+  dpiScale: DpiScale
 }
 
 const DEFAULT_CONFIG: RendererConfig = {
@@ -62,6 +69,7 @@ const DEFAULT_CONFIG: RendererConfig = {
   intensityNormMode: 'linear',
   pointShape: 'circle',
   blendMode: 'opaque',
+  dpiScale: 'auto',
 }
 
 // ---------------------------------------------------------------------------
@@ -74,10 +82,10 @@ export class PointCloudRenderer {
   readonly controls: OrbitControls
 
   private readonly webglRenderer: WebGLRenderer
-  private readonly pipeline: RenderPipeline
   private readonly tiles = new Map<string, TileMesh>()
   private readonly fpsTracker = new FpsTracker()
   private readonly resizeObserver: ResizeObserver
+  private readonly renderPipeline: RenderPipeline
 
   private animationFrameId = 0
   private lastFrameTime = 0
@@ -86,24 +94,24 @@ export class PointCloudRenderer {
   private heightMax = 100
   private disposed = false
 
+  // Auto-downscale state
+  private lowFpsStart = 0
+  private autoDownscaled = false
+  private onAutoDownscale: (() => void) | null = null
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     config?: Partial<RendererConfig>,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config }
 
-    // WebGL2 renderer
+    // WebGL2 renderer — antialias disabled (handled by MSAA in pipeline)
     this.webglRenderer = new WebGLRenderer({
       canvas,
       antialias: false,
       powerPreference: 'high-performance',
     })
-    this.webglRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-
-    // Post-processing pipeline
-    const w = canvas.clientWidth || 1
-    const h = canvas.clientHeight || 1
-    this.pipeline = new RenderPipeline(w, h)
+    this.applyDpiScale(this.config.dpiScale)
 
     // Scene
     this.scene = new Scene()
@@ -118,6 +126,15 @@ export class PointCloudRenderer {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.1
 
+    // Render pipeline (EDL + MSAA)
+    const pixelWidth = Math.floor(canvas.clientWidth * this.resolvedDpiScale)
+    const pixelHeight = Math.floor(canvas.clientHeight * this.resolvedDpiScale)
+    this.renderPipeline = new RenderPipeline(
+      Math.max(pixelWidth, 1),
+      Math.max(pixelHeight, 1),
+      { msaaSamples: 4 },
+    )
+
     // Resize handling
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
     this.resizeObserver.observe(canvas)
@@ -126,6 +143,53 @@ export class PointCloudRenderer {
     // Start render loop
     this.lastFrameTime = performance.now()
     this.loop()
+  }
+
+  // -----------------------------------------------------------------------
+  // DPI scale
+  // -----------------------------------------------------------------------
+
+  /** Resolve 'auto' to an actual numeric DPI scale */
+  get resolvedDpiScale(): number {
+    if (this.config.dpiScale === 'auto') {
+      return Math.min(window.devicePixelRatio, 2)
+    }
+    return this.config.dpiScale
+  }
+
+  /** Update DPI scale at runtime */
+  updateDpiScale(scale: DpiScale): void {
+    if (this.config.dpiScale === scale)
+      return
+    this.config = { ...this.config, dpiScale: scale }
+    this.autoDownscaled = false
+    this.lowFpsStart = 0
+    this.applyDpiScale(scale)
+    this.handleResize()
+  }
+
+  /** Register callback for auto-downscale events */
+  setAutoDownscaleCallback(cb: (() => void) | null): void {
+    this.onAutoDownscale = cb
+  }
+
+  private applyDpiScale(scale: DpiScale): void {
+    const resolved = scale === 'auto'
+      ? Math.min(window.devicePixelRatio, 2)
+      : scale
+    this.webglRenderer.setPixelRatio(resolved)
+  }
+
+  // -----------------------------------------------------------------------
+  // EDL pipeline controls
+  // -----------------------------------------------------------------------
+
+  updateEdlEnabled(enabled: boolean): void {
+    this.renderPipeline.edlEnabled = enabled
+  }
+
+  updateEdlParams(params: Partial<EdlParams>): void {
+    this.renderPipeline.updateEdlParams(params)
   }
 
   // -----------------------------------------------------------------------
@@ -219,26 +283,6 @@ export class PointCloudRenderer {
     }
   }
 
-  // -----------------------------------------------------------------------
-  // Post-processing controls
-  // -----------------------------------------------------------------------
-
-  setEdlEnabled(enabled: boolean): void {
-    this.pipeline.edlEnabled = enabled
-  }
-
-  updateEdlParams(params: Partial<EdlParams>): void {
-    this.pipeline.updateEdlParams(params)
-  }
-
-  setSsaoEnabled(enabled: boolean): void {
-    this.pipeline.ssaoEnabled = enabled
-  }
-
-  updateSsaoParams(params: Partial<SsaoParams>): void {
-    this.pipeline.updateSsaoParams(params)
-  }
-
   /** Expose tiles map for coarse AABB filtering in selection pipeline */
   getTiles(): ReadonlyMap<string, TileMesh> {
     return this.tiles
@@ -254,6 +298,10 @@ export class PointCloudRenderer {
 
   get tileCount(): number {
     return this.tiles.size
+  }
+
+  get isAutoDownscaled(): boolean {
+    return this.autoDownscaled
   }
 
   // -----------------------------------------------------------------------
@@ -275,9 +323,9 @@ export class PointCloudRenderer {
       this.tiles.delete(id)
     }
 
-    this.pipeline.dispose()
     disposeSharedResources()
     disposePalettes()
+    this.renderPipeline.dispose()
     this.webglRenderer.dispose()
   }
 
@@ -291,11 +339,42 @@ export class PointCloudRenderer {
     this.animationFrameId = requestAnimationFrame(this.loop)
 
     const now = performance.now()
-    this.fpsTracker.record(now - this.lastFrameTime)
+    const delta = now - this.lastFrameTime
+    this.fpsTracker.record(delta)
     this.lastFrameTime = now
 
     this.controls.update()
-    this.pipeline.render(this.webglRenderer, this.scene, this.camera)
+
+    // Render through EDL + MSAA pipeline
+    this.renderPipeline.render(this.webglRenderer, this.scene, this.camera)
+
+    // Auto-downscale: if FPS stays below threshold for 3+ seconds at high DPI
+    this.checkAutoDownscale(now)
+  }
+
+  private checkAutoDownscale(now: number): void {
+    // Only auto-downscale if DPI > 1 and not already downscaled
+    if (this.autoDownscaled || this.resolvedDpiScale <= 1)
+      return
+
+    const currentFps = this.fpsTracker.fps
+    if (currentFps > 0 && currentFps < LOW_FPS_THRESHOLD) {
+      if (this.lowFpsStart === 0) {
+        this.lowFpsStart = now
+      }
+      else if (now - this.lowFpsStart >= LOW_FPS_DURATION_MS) {
+        // Downscale to 1x
+        this.config = { ...this.config, dpiScale: 1 }
+        this.applyDpiScale(1)
+        this.handleResize()
+        this.autoDownscaled = true
+        this.lowFpsStart = 0
+        this.onAutoDownscale?.()
+      }
+    }
+    else {
+      this.lowFpsStart = 0
+    }
   }
 
   private handleResize(): void {
@@ -306,7 +385,12 @@ export class PointCloudRenderer {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.webglRenderer.setSize(w, h, false)
-    this.pipeline.setSize(w, h)
+
+    // Update pipeline FBOs at actual pixel dimensions
+    const dpi = this.resolvedDpiScale
+    const pixelW = Math.max(Math.floor(w * dpi), 1)
+    const pixelH = Math.max(Math.floor(h * dpi), 1)
+    this.renderPipeline.setSize(pixelW, pixelH)
 
     // Broadcast updated screen height to all tile shaders
     for (const tile of this.tiles.values()) {

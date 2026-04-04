@@ -6,6 +6,7 @@ import { PaletteId } from './renderer/palettes/palette-registry'
 export type SsaoSampleCount = 8 | 16 | 32
 export type QualityPreset = 'low' | 'medium' | 'high'
 export type IntensityNormMode = 'linear' | 'histogram'
+export type DpiScale = 1 | 1.5 | 2 | 'auto'
 
 export interface DatasetInfo {
   fileName: string
@@ -28,6 +29,9 @@ export interface ViewerState {
   // Intensity normalization
   intensityNormMode: IntensityNormMode
   paletteId: PaletteId
+
+  // DPI & quality
+  dpiScale: DpiScale
 
   // EDL (Eye-Dome Lighting)
   edlEnabled: boolean
@@ -55,6 +59,7 @@ export interface ViewerState {
   loadedPointCount: number
   activeTileCount: number
   fps: number
+  dpiAutoDownscaled: boolean
 
   // Selection
   selectionMode: boolean
@@ -77,6 +82,8 @@ export interface ViewerActions {
   setSizeMultiplier: (multiplier: number) => void
   setPointBudget: (budget: number) => void
   setQualityPreset: (preset: QualityPreset) => void
+  setDpiScale: (scale: DpiScale) => void
+  setDpiAutoDownscaled: (downscaled: boolean) => void
   setEdlEnabled: (enabled: boolean) => void
   setEdlRadius: (radius: number) => void
   setEdlStrength: (strength: number) => void
@@ -111,6 +118,7 @@ const initialState: ViewerState = {
   sizeMultiplier: 1.0,
   pointBudget: POINT_BUDGETS.medium,
   qualityPreset: 'medium',
+  dpiScale: 'auto' as DpiScale,
   edlEnabled: true,
   edlRadius: 2,
   edlStrength: 0.5,
@@ -128,6 +136,7 @@ const initialState: ViewerState = {
   loadedPointCount: 0,
   activeTileCount: 0,
   fps: 0,
+  dpiAutoDownscaled: false,
   selectionMode: false,
   selectionMap: new Map(),
   selectedPointCount: 0,
@@ -150,6 +159,9 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   setSizeMultiplier: multiplier => set({ sizeMultiplier: multiplier }),
 
   setPointBudget: budget => set({ pointBudget: budget }),
+
+  setDpiScale: scale => set({ dpiScale: scale, dpiAutoDownscaled: false }),
+  setDpiAutoDownscaled: downscaled => set({ dpiAutoDownscaled: downscaled }),
 
   setEdlEnabled: enabled => set({ edlEnabled: enabled }),
 

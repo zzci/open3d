@@ -17,14 +17,11 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
   const sizeMultiplier = useViewerStore(s => s.sizeMultiplier)
   const selectionMap = useViewerStore(s => s.selectionMap)
   const selectionMode = useViewerStore(s => s.selectionMode)
+  const dpiScale = useViewerStore(s => s.dpiScale)
   const edlEnabled = useViewerStore(s => s.edlEnabled)
-  const edlStrength = useViewerStore(s => s.edlStrength)
   const edlRadius = useViewerStore(s => s.edlRadius)
+  const edlStrength = useViewerStore(s => s.edlStrength)
   const edlExponent = useViewerStore(s => s.edlExponent)
-  const ssaoEnabled = useViewerStore(s => s.ssaoEnabled)
-  const ssaoRadius = useViewerStore(s => s.ssaoRadius)
-  const ssaoIntensity = useViewerStore(s => s.ssaoIntensity)
-  const ssaoSamples = useViewerStore(s => s.ssaoSamples)
 
   // Mount renderer
   useEffect(() => {
@@ -32,7 +29,17 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     if (!canvas)
       return
 
-    const renderer = new PointCloudRenderer(canvas, { colorMode, sizeMultiplier })
+    const renderer = new PointCloudRenderer(canvas, {
+      colorMode,
+      sizeMultiplier,
+      dpiScale,
+    })
+
+    // Wire auto-downscale notification into the store
+    renderer.setAutoDownscaleCallback(() => {
+      useViewerStore.getState().setDpiAutoDownscaled(true)
+    })
+
     rendererRef.current = renderer
     onRendererReady(renderer)
 
@@ -65,31 +72,23 @@ export function ViewerCanvas({ onRendererReady, onRendererDispose }: ViewerCanva
     rendererRef.current?.updateSelection(selectionMap)
   }, [selectionMap])
 
-  // Sync EDL parameters
+  // Sync DPI scale
   useEffect(() => {
-    rendererRef.current?.setEdlEnabled(edlEnabled)
+    rendererRef.current?.updateDpiScale(dpiScale)
+  }, [dpiScale])
+
+  // Sync EDL settings
+  useEffect(() => {
+    rendererRef.current?.updateEdlEnabled(edlEnabled)
   }, [edlEnabled])
 
   useEffect(() => {
     rendererRef.current?.updateEdlParams({
-      strength: edlStrength,
       radius: edlRadius,
+      strength: edlStrength,
       exponent: edlExponent,
     })
-  }, [edlStrength, edlRadius, edlExponent])
-
-  // Sync SSAO parameters
-  useEffect(() => {
-    rendererRef.current?.setSsaoEnabled(ssaoEnabled)
-  }, [ssaoEnabled])
-
-  useEffect(() => {
-    rendererRef.current?.updateSsaoParams({
-      radius: ssaoRadius,
-      intensity: ssaoIntensity,
-      samples: ssaoSamples,
-    })
-  }, [ssaoRadius, ssaoIntensity, ssaoSamples])
+  }, [edlRadius, edlStrength, edlExponent])
 
   // Selection hook
   const { dragRect, onPointerDown, onPointerMove, onPointerUp } = useSelection(rendererRef.current)
