@@ -1,8 +1,8 @@
 # FEAT-011 Selection system
 
-- **status**: pending
+- **status**: in-progress
 - **priority**: P2
-- **owner**: (unassigned)
+- **owner**: ai
 - **createdAt**: 2026-04-04 01:30
 
 ## Description

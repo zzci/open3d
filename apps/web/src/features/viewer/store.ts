@@ -10,6 +10,9 @@ export interface DatasetInfo {
   totalPoints: number
 }
 
+/** Per-tile selection bitmask: 1 = selected, 0 = not */
+export type SelectionMap = Map<string, Uint8Array>
+
 export interface ViewerState {
   // Render settings
   colorMode: ColorMode
@@ -31,6 +34,11 @@ export interface ViewerState {
   loadedPointCount: number
   activeTileCount: number
   fps: number
+
+  // Selection
+  selectionMode: boolean
+  selectionMap: SelectionMap
+  selectedPointCount: number
 }
 
 export interface ViewerActions {
@@ -42,6 +50,10 @@ export interface ViewerActions {
   setLoadingProgress: (progress: number) => void
   setDataset: (descriptor: DatasetDescriptor, file: File) => void
   updateStats: (stats: { loadedPointCount: number, activeTileCount: number, fps: number }) => void
+  setSelectionMode: (enabled: boolean) => void
+  setSelection: (selectionMap: SelectionMap) => void
+  clearSelection: () => void
+  removeSelectionTile: (nodeId: string) => void
   reset: () => void
 }
 
@@ -65,6 +77,9 @@ const initialState: ViewerState = {
   loadedPointCount: 0,
   activeTileCount: 0,
   fps: 0,
+  selectionMode: false,
+  selectionMap: new Map(),
+  selectedPointCount: 0,
 }
 
 export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
@@ -102,6 +117,37 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
   }),
 
   updateStats: stats => set(stats),
+
+  setSelectionMode: enabled => set({ selectionMode: enabled }),
+
+  setSelection: (selectionMap) => {
+    let count = 0
+    for (const mask of selectionMap.values()) {
+      for (let i = 0; i < mask.length; i++) {
+        if (mask[i] === 1)
+          count++
+      }
+    }
+    set({ selectionMap, selectedPointCount: count })
+  },
+
+  clearSelection: () => set({ selectionMap: new Map(), selectedPointCount: 0 }),
+
+  removeSelectionTile: (nodeId) => {
+    set((state) => {
+      const next = new Map(state.selectionMap)
+      const removed = next.get(nodeId)
+      if (!removed)
+        return state
+      next.delete(nodeId)
+      let delta = 0
+      for (let i = 0; i < removed.length; i++) {
+        if (removed[i] === 1)
+          delta++
+      }
+      return { selectionMap: next, selectedPointCount: state.selectedPointCount - delta }
+    })
+  },
 
   reset: () => set(initialState),
 }))

@@ -6,6 +6,7 @@ export function StatusBar() {
   const activeTileCount = useViewerStore(s => s.activeTileCount)
   const fps = useViewerStore(s => s.fps)
   const datasetInfo = useViewerStore(s => s.datasetInfo)
+  const selectedPointCount = useViewerStore(s => s.selectedPointCount)
 
   return (
     <div className="flex items-center gap-4 rounded-md bg-background/80 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
@@ -34,6 +35,13 @@ export function StatusBar() {
         {' '}
         tiles
       </span>
+      {selectedPointCount > 0 && (
+        <span className="text-yellow-400">
+          {formatPointCount(selectedPointCount)}
+          {' '}
+          selected
+        </span>
+      )}
       <span className="tabular-nums">
         {Math.round(fps)}
         {' '}
