@@ -80,6 +80,17 @@ export interface ProgressPayload {
 
 export const LAS_MAGIC = 'LASF'
 
+export interface TileData {
+  nodeId: string
+  level: number
+  pointCount: number
+  bounds: Bounds
+  positions: Float32Array
+  colors?: Uint8Array
+  intensity?: Float32Array
+  classification?: Uint8Array
+}
+
 export const POINT_FORMAT_ATTRIBUTES: Record<number, string[]> = {
   0: ['x', 'y', 'z', 'intensity', 'return_number', 'classification'],
   1: ['x', 'y', 'z', 'intensity', 'return_number', 'classification', 'gps_time'],
