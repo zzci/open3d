@@ -490,7 +490,7 @@ function ViewerPage() {
       )}
 
       {/* Toolbar — always visible, centered when no file */}
-      <div className={`absolute z-20 flex items-center gap-2 rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-1/2 top-3 -translate-x-1/2' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
+      <div className={`absolute z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-3 right-3 top-3' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
           <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
