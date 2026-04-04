@@ -479,6 +479,26 @@ export class DeckViewer {
 
     this.deck.setProps({
       layers: [
+        new LineLayer({
+          id: 'grid',
+          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+          data: this.gridLines,
+          getSourcePosition: ((d: GridLine) => d.s) as any,
+          getTargetPosition: ((d: GridLine) => d.t) as any,
+          getColor: ((d: GridLine) => d.c) as any,
+          getWidth: 1,
+          widthUnits: 'pixels' as const,
+        }),
+        new LineLayer({
+          id: 'axes',
+          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+          data: this.axesLines,
+          getSourcePosition: ((d: GridLine) => d.s) as any,
+          getTargetPosition: ((d: GridLine) => d.t) as any,
+          getColor: ((d: GridLine) => d.c) as any,
+          getWidth: 3,
+          widthUnits: 'pixels' as const,
+        }),
         new ScatterplotLayer({
           id: 'points',
           coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
