@@ -1,4 +1,5 @@
 import type { TileData } from '../data/types'
+import type { IntensityNormMode } from '../store'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -45,6 +46,7 @@ class FpsTracker {
 export interface RendererConfig {
   sizeMultiplier: number
   colorMode: ColorMode
+  intensityNormMode: IntensityNormMode
   pointShape: PointShape
   blendMode: BlendMode
 }
@@ -52,6 +54,7 @@ export interface RendererConfig {
 const DEFAULT_CONFIG: RendererConfig = {
   sizeMultiplier: 1.0,
   colorMode: ColorMode.RGB,
+  intensityNormMode: 'linear',
   pointShape: 'circle',
   blendMode: 'opaque',
 }
@@ -125,7 +128,7 @@ export class PointCloudRenderer {
     // Remove existing tile with same id if present
     this.removeTile(nodeId)
 
-    const tileMesh = new TileMesh(data, this.buildUniforms(data))
+    const tileMesh = new TileMesh(data, this.buildUniforms(data), this.config.intensityNormMode)
     if (this.config.blendMode !== 'opaque') {
       tileMesh.applyBlendMode(this.config.blendMode)
     }
@@ -150,6 +153,13 @@ export class PointCloudRenderer {
     this.config = { ...this.config, colorMode: mode }
     for (const tile of this.tiles.values()) {
       tile.updateUniforms({ colorMode: mode })
+    }
+  }
+
+  updateIntensityNormMode(mode: IntensityNormMode): void {
+    this.config = { ...this.config, intensityNormMode: mode }
+    for (const tile of this.tiles.values()) {
+      tile.setIntensityNormMode(mode)
     }
   }
 

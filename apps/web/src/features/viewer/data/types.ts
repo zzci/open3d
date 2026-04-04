@@ -90,6 +90,7 @@ export interface TileData {
   positions: Float32Array
   colors?: Uint8Array
   intensity?: Float32Array
+  intensityEqualized?: Float32Array
   classification?: Uint8Array
   returnNumber?: Uint8Array
   numberOfReturns?: Uint8Array

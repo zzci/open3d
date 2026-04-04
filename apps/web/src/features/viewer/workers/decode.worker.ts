@@ -66,7 +66,7 @@ function extractPoints(
   pointFormat: number,
   scale: [number, number, number],
   offset: [number, number, number],
-): { positions: Float32Array, colors: Uint8Array | undefined, intensity: Float32Array, classification: Uint8Array } {
+): { positions: Float32Array, colors: Uint8Array | undefined, intensity: Float32Array, intensityEqualized: Float32Array, classification: Uint8Array } {
   const view = new DataView(buffer)
   const hasColor = formatHasColor(pointFormat)
 
@@ -121,7 +121,40 @@ function extractPoints(
     }
   }
 
-  return { positions, colors, intensity, classification }
+  // Histogram equalization: build CDF from 256-bucket histogram, remap intensity
+  const buckets = 256
+  const histogram = new Uint32Array(buckets)
+  for (let i = 0; i < pointCount; i++) {
+    const bin = Math.min(Math.floor(intensity[i]! * buckets), buckets - 1)
+    histogram[bin]!++
+  }
+
+  // Build CDF lookup table
+  const cdf = new Float32Array(buckets)
+  cdf[0] = histogram[0]!
+  for (let i = 1; i < buckets; i++) {
+    cdf[i] = cdf[i - 1]! + histogram[i]!
+  }
+
+  // Find first non-zero CDF entry
+  let cdfMin = 0
+  for (let i = 0; i < buckets; i++) {
+    if (cdf[i]! > 0) {
+      cdfMin = cdf[i]!
+      break
+    }
+  }
+
+  const intensityEqualized = new Float32Array(pointCount)
+  const denominator = pointCount - cdfMin
+  if (denominator > 0) {
+    for (let i = 0; i < pointCount; i++) {
+      const bin = Math.min(Math.floor(intensity[i]! * buckets), buckets - 1)
+      intensityEqualized[i] = (cdf[bin]! - cdfMin) / denominator
+    }
+  }
+
+  return { positions, colors, intensity, intensityEqualized, classification }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +232,7 @@ async function decodeTile(payload: DecodeTilePayload): Promise<{
   const rawBuffer = decompressLaz(compressedBytes, pointCount, pointFormat, pointRecordLength)
 
   // Extract typed arrays from raw point records
-  const { positions, colors, intensity, classification } = extractPoints(
+  const { positions, colors, intensity, intensityEqualized, classification } = extractPoints(
     rawBuffer,
     pointCount,
     pointRecordLength,
@@ -216,6 +249,7 @@ async function decodeTile(payload: DecodeTilePayload): Promise<{
     positions,
     colors,
     intensity,
+    intensityEqualized,
     classification,
   }
 
@@ -223,6 +257,7 @@ async function decodeTile(payload: DecodeTilePayload): Promise<{
   const transfer: Transferable[] = [
     positions.buffer,
     intensity.buffer,
+    intensityEqualized.buffer,
     classification.buffer,
   ]
   if (colors) {
