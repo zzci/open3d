@@ -42,5 +42,5 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**FEAT-009 Local indexing Worker for LAS/LAZ**](FEAT-009.md) `P2`
 - [x] [**FEAT-010 OPFS cache layer**](FEAT-010.md) `P2`
 - [ ] [**FEAT-011 Selection system**](FEAT-011.md) `P2`
-- [ ] [**FEAT-012 Edit log and undo/redo**](FEAT-012.md) `P2`
+- [-] [**FEAT-012 Edit log and undo/redo**](FEAT-012.md) `P2`
 - [ ] [**FEAT-013 Streaming local export**](FEAT-013.md) `P3`

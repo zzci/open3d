@@ -1,8 +1,8 @@
 # FEAT-012 Edit log and undo/redo
 
-- **status**: pending
+- **status**: in-progress
 - **priority**: P2
-- **owner**: (unassigned)
+- **owner**: claude
 - **createdAt**: 2026-04-04 01:30
 
 ## Description
