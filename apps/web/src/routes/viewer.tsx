@@ -25,6 +25,7 @@ const COLOR_MODES = [
   { v: 'intensity', l: 'Intensity' },
   { v: 'height', l: 'Height' },
   { v: 'heightIntensity', l: 'Height+Int' },
+  { v: 'shading', l: 'Shading' },
   { v: 'edl', l: 'Warm Light' },
   { v: 'white', l: 'White' },
 ]

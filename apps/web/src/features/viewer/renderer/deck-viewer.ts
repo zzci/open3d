@@ -165,6 +165,49 @@ export function computeColors(data: PointCloudData, mode: string, out: Uint8Arra
     return
   }
 
+  if (mode === 'edl') {
+    // Warm/cool tone: bright warm highlights, cool blue shadows
+    const [iLo, iHi] = autoContrast(int, n)
+    const iR = iHi - iLo
+    for (let i = 0; i < n; i++) {
+      const t = Math.min(1, Math.max(0, (int[i]! - iLo) / iR))
+      out[i * 3] = ((0.3 + t * 0.7) * 255) | 0
+      out[i * 3 + 1] = ((0.3 + t * 0.65) * 255) | 0
+      out[i * 3 + 2] = ((0.4 + (1 - t) * 0.2 + t * 0.4) * 255) | 0
+    }
+    return
+  }
+
+  if (mode === 'shading') {
+    // Height cool-to-warm gradient + pseudo-diffuse lighting (like aaa/ _generate_shading)
+    let zMin = 1e30
+    let zMax = -1e30
+    for (let i = 0; i < n; i++) {
+      const z = pos[i * 3 + 2]!
+      if (z < zMin) zMin = z
+      if (z > zMax) zMax = z
+    }
+    const zR = zMax - zMin || 1
+    // Light direction (normalized)
+    const lx = 0.3, ly = 0.5, lz = 0.8
+    const lLen = Math.sqrt(lx * lx + ly * ly + lz * lz)
+    const nlx = lx / lLen, nly = ly / lLen, nlz = lz / lLen
+    for (let i = 0; i < n; i++) {
+      const zNorm = Math.min(1, Math.max(0, (pos[i * 3 + 2]! - zMin) / zR))
+      // Cool-to-warm: blue(low) → cyan → white → yellow → red(high)
+      const cr = Math.min(1, Math.max(0, zNorm * 2)) * 0.6 + 0.3
+      const cg = Math.min(1, Math.max(0, 1 - Math.abs(zNorm - 0.5) * 2)) * 0.5 + 0.3
+      const cb = Math.min(1, Math.max(0, (1 - zNorm) * 2)) * 0.6 + 0.3
+      // Pseudo-diffuse from position gradient (approximates normal shading without real normals)
+      // Use intensity as a proxy for surface orientation
+      const bright = 0.4 + 0.6 * Math.min(1, Math.max(0, int[i]! / 255))
+      out[i * 3] = (cr * bright * 255) | 0
+      out[i * 3 + 1] = (cg * bright * 255) | 0
+      out[i * 3 + 2] = (cb * bright * 255) | 0
+    }
+    return
+  }
+
   // white fallback
   for (let i = 0; i < n * 3; i++) out[i] = 255
 }
