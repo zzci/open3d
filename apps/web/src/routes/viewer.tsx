@@ -454,7 +454,7 @@ function ViewerPage() {
   }, [handleFile])
 
   return (
-    <div className="relative h-screen w-screen bg-[#ebedef]">
+    <div className="relative h-screen w-screen bg-[#808085]">
       {/* deck.gl container */}
       <div ref={containerRef} className="absolute inset-0" />
 
