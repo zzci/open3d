@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-04 04:30 [BUG-P1]
+
+Fixed all repository audit findings:
+- P1: Root package.json workspace filter fixed (`apps/web` → `@repo/web`)
+- P1: Viewer route branches by sourceFormat (COPC direct, LAS/LAZ shows placeholder)
+- P1: Delete/Keep toolbar actions wired to edit log via useEditSession
+- P2: Worker pool pending map isolated per worker (crash no longer fan-out)
+- P2: architecture.md rewritten to match actual browser viewer codebase
+- Dead code: Export dialog, edit session, selection overlay wired into viewer route
+
+## 2026-04-04 03:51 [progress]
+
+AUDIT-001: Wrote repository audit report to `docs/repository-audit-2026-04-04.md` and registered the work in PMA task/plan tracking.
+
 ## 2026-04-04 04:10 [BUG-P0]
 
 BUG-001: Fixed all audit findings from repository-wide code review:

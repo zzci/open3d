@@ -31,3 +31,4 @@ Each plan is a single line linking to its detail file. All detailed information 
 
 - [x] [**PLAN-001 Initialize web frontend project**](PLAN-001.md) `2026-04-04`
 - [x] [**PLAN-002 Browser point cloud viewer — pure client-side**](PLAN-002.md) `2026-04-04`
+- [x] [**PLAN-003 Record repository audit report**](PLAN-003.md) `2026-04-04`

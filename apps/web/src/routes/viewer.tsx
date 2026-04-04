@@ -1,14 +1,20 @@
 import type { DatasetDescriptor } from '@/features/viewer/data/types'
+import type { DeleteBySelectionOp, TileMask } from '@/features/viewer/editor/edit-log'
 import type { PointCloudRenderer } from '@/features/viewer/renderer/point-cloud-renderer'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef } from 'react'
 import { Matrix4 } from 'three'
+import { ExportDialog } from '@/features/viewer/components/export-dialog'
 import { FileOpener } from '@/features/viewer/components/file-opener'
 import { ProgressOverlay } from '@/features/viewer/components/progress-overlay'
+import { SelectionOverlay } from '@/features/viewer/components/selection-overlay'
 import { StatusBar } from '@/features/viewer/components/status-bar'
 import { Toolbar } from '@/features/viewer/components/toolbar'
 import { ViewerCanvas } from '@/features/viewer/components/viewer-canvas'
 import { parseCopc } from '@/features/viewer/data/copc-reader'
+import { ExportSession } from '@/features/viewer/editor/export-session'
+import { useEditSession } from '@/features/viewer/hooks/use-edit-session'
+import { useSelection } from '@/features/viewer/hooks/use-selection'
 import { useWorkerPool } from '@/features/viewer/hooks/use-worker-pool'
 import { TileScheduler } from '@/features/viewer/scheduler/tile-scheduler'
 import { createCameraIdleDetector, extractFrustumPlanes } from '@/features/viewer/scheduler/view-state'
@@ -23,18 +29,25 @@ function ViewerPage() {
   const schedulerRef = useRef<TileScheduler | null>(null)
   const idleDetectorRef = useRef<ReturnType<typeof createCameraIdleDetector> | null>(null)
   const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const exportSessionRef = useRef<ExportSession | null>(null)
   const cancelRef = useRef(false)
 
   const descriptor = useViewerStore(s => s.descriptor)
   const pointBudget = useViewerStore(s => s.pointBudget)
   const qualityPreset = useViewerStore(s => s.qualityPreset)
+  const selectionMap = useViewerStore(s => s.selectionMap)
   const setDataset = useViewerStore(s => s.setDataset)
   const setLoading = useViewerStore(s => s.setLoading)
   const setLoadingProgress = useViewerStore(s => s.setLoadingProgress)
+  const setExporting = useViewerStore(s => s.setExporting)
+  const updateExportProgress = useViewerStore(s => s.updateExportProgress)
   const updateStats = useViewerStore(s => s.updateStats)
+  const clearSelection = useViewerStore(s => s.clearSelection)
   const reset = useViewerStore(s => s.reset)
 
   const workerPool = useWorkerPool()
+  const editSession = useEditSession(descriptor?.id ?? null)
+  const selection = useSelection(rendererRef.current)
 
   // Clean up on unmount
   useEffect(() => {
@@ -43,9 +56,18 @@ function ViewerPage() {
       idleDetectorRef.current?.dispose()
       if (statsIntervalRef.current)
         clearInterval(statsIntervalRef.current)
+      exportSessionRef.current?.cancel()
       reset()
     }
   }, [reset])
+
+  // Apply selection masks to renderer
+  useEffect(() => {
+    const renderer = rendererRef.current
+    if (!renderer)
+      return
+    renderer.updateSelection(selectionMap)
+  }, [selectionMap])
 
   const buildViewState = useCallback(() => {
     const renderer = rendererRef.current
@@ -101,99 +123,198 @@ function ViewerPage() {
     setLoading(false)
   }, [setLoading])
 
-  const handleFileLoaded = useCallback(async (desc: DatasetDescriptor, file: File) => {
+  const setupScheduler = useCallback((
+    hierarchy: Map<string, import('@/features/viewer/data/types').OctreeNode>,
+    desc: DatasetDescriptor,
+    sourceFile: File,
+    pointRecordLength: number,
+  ) => {
+    const renderer = rendererRef.current
+    if (!renderer)
+      return
+
+    const scheduler = new TileScheduler(
+      hierarchy,
+      workerPool.decode,
+      {
+        onTileLoaded: (nodeId, data) => renderer.addTile(nodeId, data),
+        onTileEvicted: nodeId => renderer.removeTile(nodeId),
+      },
+      {
+        file: sourceFile,
+        pointFormat: desc.pointFormat,
+        pointRecordLength,
+        scale: desc.scale,
+        offset: desc.offset,
+      },
+      { pointBudget },
+    )
+    scheduler.setQuality(qualityPreset)
+    schedulerRef.current = scheduler
+
+    // Center camera on dataset bounds
+    const { bounds } = desc
+    const cx = (bounds.min[0] + bounds.max[0]) / 2
+    const cy = (bounds.min[1] + bounds.max[1]) / 2
+    const cz = (bounds.min[2] + bounds.max[2]) / 2
+    const dx = bounds.max[0] - bounds.min[0]
+    const dy = bounds.max[1] - bounds.min[1]
+    const dz = bounds.max[2] - bounds.min[2]
+    const size = Math.max(dx, dy, dz)
+
+    renderer.controls.target.set(cx, cy, cz)
+    renderer.camera.position.set(cx, cy + size * 0.5, cz + size)
+    renderer.camera.lookAt(cx, cy, cz)
+    renderer.controls.update()
+    renderer.updateHeightRange(bounds.min[1], bounds.max[1])
+
+    // Initial scheduling pass
+    const view = buildViewState()
+    if (view)
+      scheduler.update(view)
+
+    // Camera idle detection for re-scheduling
+    const detector = createCameraIdleDetector(() => {
+      triggerSchedulerUpdate()
+    }, 150)
+    idleDetectorRef.current = detector
+    renderer.controls.addEventListener('change', detector.onCameraMove)
+
+    // Poll stats
+    statsIntervalRef.current = setInterval(() => {
+      const s = schedulerRef.current
+      const r = rendererRef.current
+      if (s && r) {
+        updateStats({
+          loadedPointCount: s.loadedPointCount,
+          activeTileCount: s.activeTileCount,
+          fps: r.fps,
+        })
+      }
+    }, 500)
+  }, [workerPool.decode, pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
+
+  const handleFileLoaded = useCallback(async (desc: DatasetDescriptor, sourceFile: File) => {
     const renderer = rendererRef.current
     if (!renderer)
       return
 
     cancelRef.current = false
-    setDataset(desc, file)
-    setLoading(true, 'Reading header...')
+    setDataset(desc, sourceFile)
 
     try {
-      const { hierarchy } = await parseCopc(file, (phase, percent) => {
+      if (desc.sourceFormat === 'copc') {
+        // COPC path — parse hierarchy directly
+        setLoading(true, 'Reading header...')
+        const { hierarchy } = await parseCopc(sourceFile, (phase, percent) => {
+          if (cancelRef.current)
+            return
+          setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
+          setLoadingProgress(percent)
+        })
         if (cancelRef.current)
           return
-        setLoading(true, phase === 'header' ? 'Reading header...' : 'Loading hierarchy...')
-        setLoadingProgress(percent)
-      })
-
-      if (cancelRef.current)
-        return
-      setLoading(false)
-
-      // Read pointRecordLength from the LAS header (bytes 105-107)
-      const headerBuf = await file.slice(105, 107).arrayBuffer()
-      const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
-
-      const scheduler = new TileScheduler(
-        hierarchy,
-        workerPool.decode,
-        {
-          onTileLoaded: (nodeId, data) => renderer.addTile(nodeId, data),
-          onTileEvicted: nodeId => renderer.removeTile(nodeId),
-        },
-        {
-          file,
-          pointFormat: desc.pointFormat,
-          pointRecordLength,
-          scale: desc.scale,
-          offset: desc.offset,
-        },
-        { pointBudget },
-      )
-      scheduler.setQuality(qualityPreset)
-      schedulerRef.current = scheduler
-
-      // Center camera on dataset bounds
-      const { bounds } = desc
-      const cx = (bounds.min[0] + bounds.max[0]) / 2
-      const cy = (bounds.min[1] + bounds.max[1]) / 2
-      const cz = (bounds.min[2] + bounds.max[2]) / 2
-      const dx = bounds.max[0] - bounds.min[0]
-      const dy = bounds.max[1] - bounds.min[1]
-      const dz = bounds.max[2] - bounds.min[2]
-      const size = Math.max(dx, dy, dz)
-
-      renderer.controls.target.set(cx, cy, cz)
-      renderer.camera.position.set(cx, cy + size * 0.5, cz + size)
-      renderer.camera.lookAt(cx, cy, cz)
-      renderer.controls.update()
-
-      // Update height range for height color mode
-      renderer.updateHeightRange(bounds.min[1], bounds.max[1])
-
-      // Initial scheduling pass
-      const view = buildViewState()
-      if (view)
-        scheduler.update(view)
-
-      // Camera idle detection for re-scheduling
-      const detector = createCameraIdleDetector(() => {
-        triggerSchedulerUpdate()
-      }, 150)
-      idleDetectorRef.current = detector
-      renderer.controls.addEventListener('change', detector.onCameraMove)
-
-      // Poll stats
-      statsIntervalRef.current = setInterval(() => {
-        const s = schedulerRef.current
-        const r = rendererRef.current
-        if (s && r) {
-          updateStats({
-            loadedPointCount: s.loadedPointCount,
-            activeTileCount: s.activeTileCount,
-            fps: r.fps,
-          })
-        }
-      }, 500)
-    }
-    catch {
-      if (!cancelRef.current) {
         setLoading(false)
+
+        const headerBuf = await sourceFile.slice(105, 107).arrayBuffer()
+        const pointRecordLength = new DataView(headerBuf).getUint16(0, true)
+        setupScheduler(hierarchy, desc, sourceFile, pointRecordLength)
+      }
+      else {
+        // LAS/LAZ path — needs indexing first (not yet wired to scheduler)
+        // TODO: integrate indexing.worker.ts when LAS→octree path is complete
+        setLoading(true, 'LAS/LAZ indexing not yet available')
+        setTimeout(setLoading, 2000, false)
       }
     }
-  }, [setDataset, setLoading, setLoadingProgress, workerPool.decode, pointBudget, qualityPreset, buildViewState, triggerSchedulerUpdate, updateStats])
+    catch {
+      if (!cancelRef.current)
+        setLoading(false)
+    }
+  }, [setDataset, setLoading, setLoadingProgress, setupScheduler])
+
+  // --- Selection actions: Delete / Keep ---
+
+  const handleDeleteSelected = useCallback(() => {
+    const sm = useViewerStore.getState().selectionMap
+    if (sm.size === 0)
+      return
+    const masks: TileMask[] = []
+    for (const [tileId, mask] of sm) {
+      masks.push({ tileId, mask })
+    }
+    const op: DeleteBySelectionOp = { type: 'deleteBySelection', masks }
+    const renderer = rendererRef.current
+    const cam = renderer?.camera
+    const ctrl = renderer?.controls
+    editSession.apply(op, cam && ctrl
+      ? {
+          position: [cam.position.x, cam.position.y, cam.position.z],
+          target: [ctrl.target.x, ctrl.target.y, ctrl.target.z],
+        }
+      : null)
+    clearSelection()
+  }, [editSession, clearSelection])
+
+  const handleKeepSelected = useCallback(() => {
+    // Keep selected = invert: delete everything NOT selected
+    // This is equivalent to keepByAABB with the selection bounding box
+    // For now, use the same delete mechanism with inverted masks
+    const sm = useViewerStore.getState().selectionMap
+    if (sm.size === 0)
+      return
+    const masks: TileMask[] = []
+    for (const [tileId, mask] of sm) {
+      const inverted = new Uint8Array(mask.length)
+      for (let i = 0; i < mask.length; i++) {
+        inverted[i] = mask[i] === 1 ? 0 : 1
+      }
+      masks.push({ tileId, mask: inverted })
+    }
+    const op: DeleteBySelectionOp = { type: 'deleteBySelection', masks }
+    editSession.apply(op)
+    clearSelection()
+  }, [editSession, clearSelection])
+
+  // --- Export ---
+
+  const handleExport = useCallback(() => {
+    const state = useViewerStore.getState()
+    if (!state.descriptor || !state.file)
+      return
+
+    setExporting(true)
+    const session = new ExportSession()
+    exportSessionRef.current = session
+
+    session.start({
+      file: state.file,
+      descriptor: state.descriptor,
+      editLog: [], // TODO: convert activeEntries to EditLogEntry format for export worker
+      onProgress: (p) => {
+        updateExportProgress({
+          phase: p.phase,
+          pointsProcessed: p.pointsProcessed,
+          totalPoints: p.totalPoints,
+          bytesWritten: p.bytesWritten,
+        })
+      },
+      onComplete: () => {
+        setExporting(false)
+        exportSessionRef.current = null
+      },
+      onError: () => {
+        setExporting(false)
+        exportSessionRef.current = null
+      },
+    })
+  }, [setExporting, updateExportProgress])
+
+  const handleExportCancel = useCallback(() => {
+    exportSessionRef.current?.cancel()
+    exportSessionRef.current = null
+    setExporting(false)
+  }, [setExporting])
 
   // Sync budget/preset changes to scheduler at runtime
   useEffect(() => {
@@ -214,11 +335,21 @@ function ViewerPage() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-neutral-900">
-      {/* 3D Canvas */}
-      <ViewerCanvas
-        onRendererReady={handleRendererReady}
-        onRendererDispose={handleRendererDispose}
-      />
+      {/* 3D Canvas with selection pointer events */}
+      <div
+        className="h-full w-full"
+        onPointerDown={selection.onPointerDown}
+        onPointerMove={selection.onPointerMove}
+        onPointerUp={selection.onPointerUp}
+      >
+        <ViewerCanvas
+          onRendererReady={handleRendererReady}
+          onRendererDispose={handleRendererDispose}
+        />
+      </div>
+
+      {/* Selection rubber-band overlay */}
+      {selection.dragRect && <SelectionOverlay rect={selection.dragRect} />}
 
       {/* File opener — shown when no dataset loaded */}
       {!descriptor && (
@@ -230,10 +361,17 @@ function ViewerPage() {
       {/* Progress overlay */}
       <ProgressOverlay onCancel={handleCancel} />
 
+      {/* Export dialog */}
+      <ExportDialog onCancel={handleExportCancel} />
+
       {/* Top toolbar */}
       {descriptor && (
         <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
-          <Toolbar />
+          <Toolbar
+            onExport={handleExport}
+            onDeleteSelected={handleDeleteSelected}
+            onKeepSelected={handleKeepSelected}
+          />
         </div>
       )}
 

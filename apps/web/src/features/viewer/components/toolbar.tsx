@@ -14,6 +14,8 @@ import { useViewerStore } from '../store'
 
 interface ToolbarProps {
   onExport?: () => void
+  onDeleteSelected?: () => void
+  onKeepSelected?: () => void
 }
 
 const COLOR_MODE_OPTIONS = [
@@ -32,7 +34,7 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
   high: 'High',
 }
 
-export function Toolbar({ onExport }: ToolbarProps) {
+export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
   const pointSize = useViewerStore(s => s.pointSize)
   const pointBudget = useViewerStore(s => s.pointBudget)
@@ -153,9 +155,7 @@ export function Toolbar({ onExport }: ToolbarProps) {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-destructive"
-              onClick={() => {
-                // Delete selected — store action stub for FEAT-012
-              }}
+              onClick={onDeleteSelected}
             >
               Delete
             </Button>
@@ -163,9 +163,7 @@ export function Toolbar({ onExport }: ToolbarProps) {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
-              onClick={() => {
-                // Keep selected — store action stub for FEAT-012
-              }}
+              onClick={onKeepSelected}
             >
               Keep
             </Button>

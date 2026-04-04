@@ -14,6 +14,7 @@ interface PoolWorker {
   worker: Worker
   pending: number
   ready: boolean
+  requestIds: Set<string>
 }
 
 interface UseWorkerPoolOptions {
@@ -53,7 +54,7 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
         { type: 'module' },
       )
 
-      const poolWorker: PoolWorker = { worker, pending: 0, ready: false }
+      const poolWorker: PoolWorker = { worker, pending: 0, ready: false, requestIds: new Set() }
 
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
         const { requestId, type, payload } = event.data
@@ -64,6 +65,7 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
 
         if (type === 'result') {
           pending.delete(requestId)
+          poolWorker.requestIds.delete(requestId)
           poolWorker.pending--
 
           // Check if this is an init response
@@ -77,6 +79,7 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
         }
         else if (type === 'error') {
           pending.delete(requestId)
+          poolWorker.requestIds.delete(requestId)
           poolWorker.pending--
           const msg = (payload as { message: string }).message
           req.reject(new Error(msg))
@@ -86,13 +89,18 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
 
       worker.onerror = (event) => {
         event.preventDefault()
-        // Reject all pending requests on this worker and mark it dead
+        // Reject only this worker's pending requests, not other workers'
         poolWorker.ready = false
         worker.terminate()
-        for (const [reqId, req] of pending) {
-          req.reject(new Error('Worker crashed'))
-          pending.delete(reqId)
+        for (const reqId of poolWorker.requestIds) {
+          const req = pending.get(reqId)
+          if (req) {
+            pending.delete(reqId)
+            req.reject(new Error('Worker crashed'))
+          }
         }
+        poolWorker.requestIds.clear()
+        poolWorker.pending = 0
       }
 
       workers.push(poolWorker)
@@ -105,6 +113,7 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
         resolve: () => { poolWorker.ready = true },
         reject: () => {},
       })
+      poolWorker.requestIds.add(initId)
       poolWorker.pending++
       worker.postMessage(initReq)
     }
@@ -147,6 +156,7 @@ export function useWorkerPool(options?: UseWorkerPoolOptions): WorkerPool {
       const poolWorker = pickWorker()
 
       pendingRef.current.set(requestId, { resolve, reject })
+      poolWorker.requestIds.add(requestId)
       poolWorker.pending++
 
       const msg: WorkerRequest = {

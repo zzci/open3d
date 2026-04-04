@@ -3,11 +3,11 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "bun run --filter apps/web dev",
-    "build": "bun run --filter apps/web build",
-    "lint": "bun run --filter apps/web lint",
-    "typecheck": "bun run --filter apps/web typecheck",
-    "test": "bun run --filter apps/web test"
+    "dev": "bun run --filter @repo/web dev",
+    "build": "bun run --filter @repo/web build",
+    "lint": "bun run --filter @repo/web lint",
+    "typecheck": "bun run --filter @repo/web typecheck",
+    "test": "bun run --filter @repo/web test"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^8.0.0",
