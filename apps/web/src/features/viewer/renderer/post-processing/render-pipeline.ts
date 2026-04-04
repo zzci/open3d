@@ -81,8 +81,8 @@ export class RenderPipeline {
     })
 
     const geo = new BufferGeometry()
-    const vertices = new Float32Array([-1, -1, 3, -1, -1, 3])
-    geo.setAttribute('position', new BufferAttribute(vertices, 2))
+    const vertices = new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0])
+    geo.setAttribute('position', new BufferAttribute(vertices, 3))
     this.compositeQuad = new Mesh(geo, this.compositeMaterial)
     this.compositeQuad.frustumCulled = false
     this.compositeScene.add(this.compositeQuad)
