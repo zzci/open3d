@@ -101,11 +101,11 @@ export function computeColors(data: PointCloudData, mode: string, out: Uint8Arra
   }
 
   if (mode === 'rgb' || mode === 'intensity') {
+    // Match aaa/ approach: 2-98 percentile stretch, linear mapping, full 0-255 range
     const [lo, hi] = autoContrast(int, n)
-    const r = hi - lo
+    const r = hi - lo || 1
     for (let i = 0; i < n; i++) {
-      const t = Math.min(1, Math.max(0, (int[i]! - lo) / r))
-      const v = (30 + (t ** 0.7) * 225) | 0
+      const v = Math.min(255, Math.max(0, ((int[i]! - lo) / r) * 255)) | 0
       out[i * 3] = v
       out[i * 3 + 1] = v
       out[i * 3 + 2] = v
@@ -243,15 +243,15 @@ function buildGrid(bounds: PointCloudData['bounds']): { lines: GridLine[], axes:
   const gxx = Math.ceil(xx / gridStep) * gridStep
   const gyn = Math.floor(yn / gridStep) * gridStep
   const gyx = Math.ceil(yx / gridStep) * gridStep
-  const gridColor = [180, 182, 185]
+  const gridColor = [31, 41, 55] // dark grid for dark bg
 
   for (let x = gxn; x <= gxx; x += gridStep) {
     const isOrigin = Math.abs(x) < gridStep * 0.01
-    lines.push({ s: [x, gyn, zn], t: [x, gyx, zn], c: isOrigin ? [180, 80, 80] : gridColor })
+    lines.push({ s: [x, gyn, zn], t: [x, gyx, zn], c: isOrigin ? [100, 40, 40] : gridColor })
   }
   for (let y = gyn; y <= gyx; y += gridStep) {
     const isOrigin = Math.abs(y) < gridStep * 0.01
-    lines.push({ s: [gxn, y, zn], t: [gxx, y, zn], c: isOrigin ? [80, 160, 80] : gridColor })
+    lines.push({ s: [gxn, y, zn], t: [gxx, y, zn], c: isOrigin ? [40, 80, 40] : gridColor })
   }
 
   const axLen = maxRange * 0.15
@@ -303,7 +303,7 @@ export class DeckViewer {
       views: new OrbitView({ orbitAxis: 'Z' }),
       initialViewState: this.viewState,
       controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
-      parameters: { depthTest: true, clearColor: [0.86, 0.87, 0.88, 1] } as any,
+      parameters: { depthTest: true, clearColor: [0.05, 0.07, 0.09, 1] } as any, // dark bg like aaa/
       onViewStateChange: ({ viewState }: any) => {
         this.viewState = viewState
         this.config.onViewStateChange?.(viewState)

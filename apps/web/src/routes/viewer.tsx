@@ -254,7 +254,7 @@ function ViewerPage() {
 
   // Auto color for grayscale
   useEffect(() => {
-    if (data?.isGrayscale && colorMode === 'rgb') setColorMode('heightIntensity')
+    if (data?.isGrayscale && colorMode === 'rgb') setColorMode('intensity')
   }, [data?.isGrayscale, colorMode])
 
   // Keyboard shortcuts
@@ -287,7 +287,7 @@ function ViewerPage() {
   }, [handleFile])
 
   return (
-    <div className="relative h-screen w-screen bg-neutral-100">
+    <div className="relative h-screen w-screen bg-[#0d1117]">
       {/* deck.gl container */}
       <div ref={containerRef} className="absolute inset-0" />
 
