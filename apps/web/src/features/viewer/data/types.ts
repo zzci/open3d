@@ -31,6 +31,7 @@ export interface FileAccessState {
   isLoading: boolean
   error: string | null
   descriptor: DatasetDescriptor | null
+  file: File | null
 }
 
 // --- Octree hierarchy types ---

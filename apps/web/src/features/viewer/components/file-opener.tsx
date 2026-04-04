@@ -1,10 +1,10 @@
 import type { DatasetDescriptor } from '../data/types'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/shared/lib/utils'
 import { useFileAccess } from '../hooks/use-file-access'
 
 interface FileOpenerProps {
-  onFileLoaded: (descriptor: DatasetDescriptor) => void
+  onFileLoaded: (descriptor: DatasetDescriptor, file: File) => void
   className?: string
 }
 
@@ -13,6 +13,7 @@ export function FileOpener({ onFileLoaded, className }: FileOpenerProps) {
     isLoading,
     error,
     descriptor,
+    file,
     inputRef,
     supportsFilePicker,
     openFilePicker,
@@ -23,9 +24,11 @@ export function FileOpener({ onFileLoaded, className }: FileOpenerProps) {
   } = useFileAccess()
   const [isDragOver, setIsDragOver] = useState(false)
 
-  if (descriptor) {
-    onFileLoaded(descriptor)
-  }
+  useEffect(() => {
+    if (descriptor && file) {
+      onFileLoaded(descriptor, file)
+    }
+  }, [descriptor, file, onFileLoaded])
 
   function onDragEnter(e: React.DragEvent) {
     e.preventDefault()

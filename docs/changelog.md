@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-04-04 02:20 [progress]
+
+FEAT-007: Basic viewer UI. Zustand store for viewer state (color mode, point size, budget, quality preset, loading, stats). shadcn/ui components (Button, Slider, Select, Dialog). Toolbar with color mode picker, point size/budget sliders, quality presets. Status bar with point count, tiles, FPS, dataset info. Progress overlay with cancel. ViewerCanvas component mounting PointCloudRenderer. /viewer route composing all components with COPC loading, scheduler integration, camera idle detection, and stats polling. Enhanced FileOpener and useFileAccess to pass raw File object for scheduler. Format utils extracted to lib/format.ts.
+
 ## 2026-04-04 01:55 [progress]
 
 FEAT-006: Three.js WebGL2 point cloud renderer. Tile-based rendering with custom ShaderMaterial, 5 color modes (RGB, intensity, height, classification, white) as GPU uniforms — no CPU color rebuild. OrbitControls, ResizeObserver, FPS tracking. Classification palette via 1D texture lookup. Proper GPU resource disposal on tile eviction.

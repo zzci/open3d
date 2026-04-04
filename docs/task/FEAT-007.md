@@ -1,8 +1,8 @@
 # FEAT-007 Basic viewer UI
 
-- **status**: pending
+- **status**: completed
 - **priority**: P1
-- **owner**: (unassigned)
+- **owner**: claude
 - **createdAt**: 2026-04-04 01:30
 
 ## Description
