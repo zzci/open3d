@@ -11,13 +11,12 @@ export const Route = createFileRoute('/viewer')({
 })
 
 const MAX_PTS = [
-  { v: 500000, l: '500K' },
   { v: 1000000, l: '1M' },
-  { v: 2000000, l: '2M' },
   { v: 3000000, l: '3M' },
   { v: 5000000, l: '5M' },
-  { v: 8000000, l: '8M' },
   { v: 10000000, l: '10M' },
+  { v: 20000000, l: '20M' },
+  { v: 0, l: 'All' },
 ]
 
 const VIEWS = ['persp', 'top', 'bottom', 'front', 'back', 'right', 'left'] as const
@@ -50,7 +49,7 @@ function ViewerPage() {
   const [progress, setProgress] = useState(0)
   const [toast, setToast] = useState<{ msg: string, type: string } | null>(null)
   const [pointSize, setPointSize] = useState(1.0)
-  const [maxPoints, setMaxPoints] = useState(3000000)
+  const [maxPoints, setMaxPoints] = useState(0) // 0 = all points, no downsampling
   const [colorMode, setColorMode] = useState('rgb')
   const [viewPreset, setViewPreset] = useState<string | null>('persp')
   const [mode, setMode] = useState<InteractionMode>('navigate')
