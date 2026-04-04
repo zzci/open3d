@@ -8,6 +8,11 @@ export enum ColorMode {
   Height = 2,
   Classification = 3,
   White = 4,
+  GrayscaleIntensity = 5,
+  IntensityHeight = 6,
+  ReturnNumber = 7,
+  PaletteIntensity = 8,
+  PaletteHeight = 9,
 }
 
 export const COLOR_MODE_LABELS: Record<ColorMode, string> = {
@@ -16,6 +21,11 @@ export const COLOR_MODE_LABELS: Record<ColorMode, string> = {
   [ColorMode.Height]: 'Height',
   [ColorMode.Classification]: 'Classification',
   [ColorMode.White]: 'White',
+  [ColorMode.GrayscaleIntensity]: 'Grayscale',
+  [ColorMode.IntensityHeight]: 'Intensity × Height',
+  [ColorMode.ReturnNumber]: 'Return Number',
+  [ColorMode.PaletteIntensity]: 'Palette (Intensity)',
+  [ColorMode.PaletteHeight]: 'Palette (Height)',
 }
 
 /**

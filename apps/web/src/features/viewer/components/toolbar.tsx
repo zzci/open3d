@@ -24,6 +24,11 @@ const COLOR_MODE_OPTIONS = [
   ColorMode.Height,
   ColorMode.Classification,
   ColorMode.White,
+  ColorMode.GrayscaleIntensity,
+  ColorMode.IntensityHeight,
+  ColorMode.ReturnNumber,
+  ColorMode.PaletteIntensity,
+  ColorMode.PaletteHeight,
 ] as const
 
 const QUALITY_OPTIONS: QualityPreset[] = ['low', 'medium', 'high']
@@ -63,7 +68,7 @@ export function Toolbar({ onExport, onDeleteSelected, onKeepSelected }: ToolbarP
           value={String(colorMode)}
           onValueChange={v => setColorMode(Number(v) as ColorMode)}
         >
-          <SelectTrigger className="h-7 w-[120px] text-xs">
+          <SelectTrigger className="h-7 w-[160px] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

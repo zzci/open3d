@@ -116,6 +116,22 @@ export class TileMesh {
       )
     }
 
+    // Return number attribute
+    if (data.returnNumber) {
+      const rnFloat = new Float32Array(data.returnNumber)
+      this.geometry.setAttribute(
+        'aReturnNumber',
+        new BufferAttribute(rnFloat, 1),
+      )
+    }
+    else {
+      const zeros = new Float32Array(data.pointCount)
+      this.geometry.setAttribute(
+        'aReturnNumber',
+        new BufferAttribute(zeros, 1),
+      )
+    }
+
     // Selection attribute — default all zeros (not selected)
     const selectionData = new Float32Array(data.pointCount)
     this.geometry.setAttribute(
