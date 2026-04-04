@@ -5,6 +5,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
 import { applyOp, loadLAS } from '@/features/viewer/data/las-loader'
+import { loadPLY } from '@/features/viewer/data/ply-loader'
 import { useI18n } from '@/features/viewer/hooks/use-i18n'
 import { saveFilteredLAS } from '@/features/viewer/data/las-saver'
 
@@ -112,10 +113,14 @@ function ViewerPage() {
     setLoadText(`${t('loading')} ${file.name}...`)
     setProgress(0)
     try {
-      const pd = await loadLAS(file, mp, (pct) => {
+      const onPct = (pct: number) => {
         setProgress(pct)
-        setLoadText(`Loading... ${(pct * 100) | 0}%`)
-      })
+        setLoadText(`${t('loading')}... ${(pct * 100) | 0}%`)
+      }
+      const isPly = file.name.toLowerCase().endsWith('.ply')
+      const pd = isPly
+        ? await loadPLY(file, mp, onPct)
+        : await loadLAS(file, mp, onPct)
       baseDataRef.current = pd
       const derived = deriveData(pd, opsRef.current)
       setData(derived)
@@ -446,7 +451,7 @@ function ViewerPage() {
       e.preventDefault()
       e.stopPropagation()
       const f = e.dataTransfer?.files[0]
-      if (f && /\.la[sz]$/i.test(f.name)) handleFile(f)
+      if (f && /\.la[sz]|.ply$/i.test(f.name)) handleFile(f)
     }
     window.addEventListener('dragover', prevent)
     window.addEventListener('drop', drop)
@@ -512,7 +517,7 @@ function ViewerPage() {
       <div className={`absolute z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-3 right-3 top-3' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
-          <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
+          <input type="file" accept=".las,.laz,.ply" className="hidden" onChange={handleInputChange} />
         </label>
 
         {fileName && (
