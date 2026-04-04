@@ -12,6 +12,10 @@ import { formatMillions } from '../lib/format'
 import { COLOR_MODE_LABELS, ColorMode } from '../renderer/color-modes'
 import { useViewerStore } from '../store'
 
+interface ToolbarProps {
+  onExport?: () => void
+}
+
 const COLOR_MODE_OPTIONS = [
   ColorMode.RGB,
   ColorMode.Intensity,
@@ -28,11 +32,13 @@ const QUALITY_LABELS: Record<QualityPreset, string> = {
   high: 'High',
 }
 
-export function Toolbar() {
+export function Toolbar({ onExport }: ToolbarProps) {
   const colorMode = useViewerStore(s => s.colorMode)
   const pointSize = useViewerStore(s => s.pointSize)
   const pointBudget = useViewerStore(s => s.pointBudget)
   const qualityPreset = useViewerStore(s => s.qualityPreset)
+  const descriptor = useViewerStore(s => s.descriptor)
+  const isExporting = useViewerStore(s => s.isExporting)
   const setColorMode = useViewerStore(s => s.setColorMode)
   const setPointSize = useViewerStore(s => s.setPointSize)
   const setPointBudget = useViewerStore(s => s.setPointBudget)
@@ -166,6 +172,22 @@ export function Toolbar() {
           </>
         )}
       </div>
+
+      {onExport && (
+        <>
+          <div className="h-4 w-px bg-border" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-3 text-xs"
+            disabled={!descriptor || isExporting}
+            onClick={onExport}
+          >
+            Export LAS
+          </Button>
+        </>
+      )}
     </div>
   )
 }

@@ -13,6 +13,8 @@ export interface DatasetInfo {
 /** Per-tile selection bitmask: 1 = selected, 0 = not */
 export type SelectionMap = Map<string, Uint8Array>
 
+export type ExportPhase = 'counting' | 'writing' | 'finalizing'
+
 export interface ViewerState {
   // Render settings
   colorMode: ColorMode
@@ -39,6 +41,14 @@ export interface ViewerState {
   selectionMode: boolean
   selectionMap: SelectionMap
   selectedPointCount: number
+
+  // Export
+  isExporting: boolean
+  exportProgress: number
+  exportPhase: ExportPhase | ''
+  exportPointsProcessed: number
+  exportTotalPoints: number
+  exportBytesWritten: number
 }
 
 export interface ViewerActions {
@@ -54,6 +64,8 @@ export interface ViewerActions {
   setSelection: (selectionMap: SelectionMap) => void
   clearSelection: () => void
   removeSelectionTile: (nodeId: string) => void
+  setExporting: (isExporting: boolean) => void
+  updateExportProgress: (data: { phase: ExportPhase, pointsProcessed: number, totalPoints: number, bytesWritten: number }) => void
   reset: () => void
 }
 
@@ -80,6 +92,12 @@ const initialState: ViewerState = {
   selectionMode: false,
   selectionMap: new Map(),
   selectedPointCount: 0,
+  isExporting: false,
+  exportProgress: 0,
+  exportPhase: '',
+  exportPointsProcessed: 0,
+  exportTotalPoints: 0,
+  exportBytesWritten: 0,
 }
 
 export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
@@ -148,6 +166,25 @@ export const useViewerStore = create<ViewerState & ViewerActions>()(set => ({
       return { selectionMap: next, selectedPointCount: state.selectedPointCount - delta }
     })
   },
+
+  setExporting: isExporting => set({
+    isExporting,
+    ...(!isExporting && {
+      exportProgress: 0,
+      exportPhase: '' as const,
+      exportPointsProcessed: 0,
+      exportTotalPoints: 0,
+      exportBytesWritten: 0,
+    }),
+  }),
+
+  updateExportProgress: ({ phase, pointsProcessed, totalPoints, bytesWritten }) => set({
+    exportPhase: phase,
+    exportPointsProcessed: pointsProcessed,
+    exportTotalPoints: totalPoints,
+    exportBytesWritten: bytesWritten,
+    exportProgress: totalPoints > 0 ? (pointsProcessed / totalPoints) * 100 : 0,
+  }),
 
   reset: () => set(initialState),
 }))
