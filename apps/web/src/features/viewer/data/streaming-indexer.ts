@@ -13,20 +13,14 @@
  */
 
 import type { LasHeader } from './las-reader'
-import type { Bounds, OctreeNode } from './types'
 import type { TileAttributes } from './octree-builder'
+import type { Bounds, OctreeNode } from './types'
+import { formatHasColor } from './las-reader'
 import {
   encodeTileBinary,
-  FLAG_HAS_COLOR,
-  FLAG_HAS_EXTRA,
-  FLAG_HAS_GPS_TIME,
-  FLAG_HAS_NIR,
-  FLAG_HAS_RETURN_NUMBER,
-  FLAG_HAS_SCAN_ANGLE,
   LOD_SAMPLES_PER_NODE,
   MIN_LEAF_POINTS,
 } from './octree-builder'
-import { formatHasColor, POINT_RECORD_BASE_SIZES } from './las-reader'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,8 +52,12 @@ const SCAN_CHUNK_SIZE = 200_000
 // ---------------------------------------------------------------------------
 
 function classifyOctant(
-  x: number, y: number, z: number,
-  midX: number, midY: number, midZ: number,
+  x: number,
+  y: number,
+  z: number,
+  midX: number,
+  midY: number,
+  midZ: number,
 ): number {
   return (x >= midX ? 1 : 0)
     | (y >= midY ? 2 : 0)
@@ -128,7 +126,8 @@ export async function countOctants(
   let filePos = offsetToPointData
 
   while (remaining > 0) {
-    if (cancel?.()) throw new Error('Cancelled')
+    if (cancel?.())
+      throw new Error('Cancelled')
 
     const batchCount = Math.min(SCAN_CHUNK_SIZE, remaining)
     const batchBytes = batchCount * pointRecordLength
@@ -145,7 +144,8 @@ export async function countOctants(
       const y = yi * scale[1] + fileOffset[1]
       const z = zi * scale[2] + fileOffset[2]
 
-      if (!pointInBounds(x, y, z, regionBounds)) continue
+      if (!pointInBounds(x, y, z, regionBounds))
+        continue
 
       const octant = classifyOctant(x, y, z, midX, midY, midZ)
       counts[octant]++
@@ -200,7 +200,8 @@ export async function readRegionPoints(
   let filePos = offsetToPointData
 
   while (remaining > 0) {
-    if (cancel?.()) throw new Error('Cancelled')
+    if (cancel?.())
+      throw new Error('Cancelled')
 
     const batchCount = Math.min(SCAN_CHUNK_SIZE, remaining)
     const batchBytes = batchCount * pointRecordLength
@@ -217,7 +218,8 @@ export async function readRegionPoints(
       const y = yi * scale[1] + fileOffset[1]
       const z = zi * scale[2] + fileOffset[2]
 
-      if (!pointInBounds(x, y, z, regionBounds)) continue
+      if (!pointInBounds(x, y, z, regionBounds))
+        continue
 
       const w = written
       positions[w * 3] = x
@@ -236,7 +238,8 @@ export async function readRegionPoints(
         pointSourceId[w] = view.getUint16(off + 18, true)
 
         if (pointFormat === 1 || pointFormat === 3) {
-          if (gpsTime) gpsTime[w] = view.getFloat64(off + 20, true)
+          if (gpsTime)
+            gpsTime[w] = view.getFloat64(off + 20, true)
         }
         if (pointFormat === 2 && colors) {
           colors[w * 3] = view.getUint16(off + 20, true) >> 8
@@ -255,13 +258,16 @@ export async function readRegionPoints(
         returnNumber[w] = flagByte & 0x0F
         numberOfReturns[w] = (flagByte >> 4) & 0x0F
         const flagByte2 = view.getUint8(off + 15)
-        if (classificationFlags) classificationFlags[w] = flagByte2 & 0x0F
-        if (scannerChannel) scannerChannel[w] = (flagByte2 >> 4) & 0x03
+        if (classificationFlags)
+          classificationFlags[w] = flagByte2 & 0x0F
+        if (scannerChannel)
+          scannerChannel[w] = (flagByte2 >> 4) & 0x03
         classification[w] = view.getUint8(off + 16)
         userData[w] = view.getUint8(off + 17)
         scanAngle[w] = view.getInt16(off + 18, true) * 0.006
         pointSourceId[w] = view.getUint16(off + 20, true)
-        if (gpsTime) gpsTime[w] = view.getFloat64(off + 22, true)
+        if (gpsTime)
+          gpsTime[w] = view.getFloat64(off + 22, true)
 
         if (pointFormat >= 7 && colors) {
           colors[w * 3] = view.getUint16(off + 30, true) >> 8
@@ -341,9 +347,18 @@ export async function buildStreamingOctree(
   })
 
   await buildNodeRecursive(
-    file, header, bounds, '0-0-0-0', 0, targetDepth,
-    rootTotal, rootCounts,
-    hierarchy, writeTile, onProgress, cancel,
+    file,
+    header,
+    bounds,
+    '0-0-0-0',
+    0,
+    targetDepth,
+    rootTotal,
+    rootCounts,
+    hierarchy,
+    writeTile,
+    onProgress,
+    cancel,
     { totalNodes: 0, totalBytes: 0, nodesCompleted: 0 },
   )
 
@@ -374,7 +389,8 @@ async function buildNodeRecursive(
   cancel: CancelCheck | undefined,
   stats: BuildStats,
 ): Promise<void> {
-  if (cancel?.()) throw new Error('Cancelled')
+  if (cancel?.())
+    throw new Error('Cancelled')
 
   const isLeaf = depth >= maxDepth || pointCount <= MIN_LEAF_POINTS
 
@@ -421,7 +437,8 @@ async function buildNodeRecursive(
   // Determine child mask
   let childMask = 0
   for (let o = 0; o < 8; o++) {
-    if (counts[o]! > 0) childMask |= (1 << o)
+    if (counts[o]! > 0)
+      childMask |= (1 << o)
   }
 
   // Parse parent key for child ID generation
@@ -433,7 +450,8 @@ async function buildNodeRecursive(
   // Recurse into non-empty children
   for (let o = 0; o < 8; o++) {
     const childCount = counts[o]!
-    if (childCount === 0) continue
+    if (childCount === 0)
+      continue
 
     const childDepth = depth + 1
     const childX = parentX * 2 + (o & 1)
@@ -443,9 +461,19 @@ async function buildNodeRecursive(
     const cBounds = childBounds(nodeBounds, o)
 
     await buildNodeRecursive(
-      file, header, cBounds, childId, childDepth, maxDepth,
-      childCount, null,
-      hierarchy, writeTile, onProgress, cancel, stats,
+      file,
+      header,
+      cBounds,
+      childId,
+      childDepth,
+      maxDepth,
+      childCount,
+      null,
+      hierarchy,
+      writeTile,
+      onProgress,
+      cancel,
+      stats,
     )
   }
 
@@ -512,7 +540,8 @@ async function readRegionLod(
   let filePos = offsetToPointData
 
   while (remaining > 0) {
-    if (cancel?.()) throw new Error('Cancelled')
+    if (cancel?.())
+      throw new Error('Cancelled')
 
     const batchCount = Math.min(SCAN_CHUNK_SIZE, remaining)
     const batchBytes = batchCount * pointRecordLength
@@ -529,7 +558,8 @@ async function readRegionLod(
       const y = yi * scale[1] + fileOffset[1]
       const z = zi * scale[2] + fileOffset[2]
 
-      if (!pointInBounds(x, y, z, regionBounds)) continue
+      if (!pointInBounds(x, y, z, regionBounds))
+        continue
 
       // Only keep every Nth matching point
       if (hitIndex % stride === 0 && written < expectedCount) {

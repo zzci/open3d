@@ -1,5 +1,5 @@
 import type { TileData } from '../data/types'
-import type { PointUniforms } from './tile-mesh'
+import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
   Scene,
@@ -45,11 +45,15 @@ class FpsTracker {
 export interface RendererConfig {
   pointSize: number
   colorMode: ColorMode
+  pointShape: PointShape
+  blendMode: BlendMode
 }
 
 const DEFAULT_CONFIG: RendererConfig = {
   pointSize: 2.0,
   colorMode: ColorMode.RGB,
+  pointShape: 'circle',
+  blendMode: 'opaque',
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +126,9 @@ export class PointCloudRenderer {
     this.removeTile(nodeId)
 
     const tileMesh = new TileMesh(data, this.buildUniforms(data))
+    if (this.config.blendMode !== 'opaque') {
+      tileMesh.applyBlendMode(this.config.blendMode)
+    }
     this.tiles.set(nodeId, tileMesh)
     this.scene.add(tileMesh.points)
   }
@@ -168,6 +175,20 @@ export class PointCloudRenderer {
       const mask = selectionMap.get(nodeId) ?? null
       tile.updateSelectionMask(mask)
       tile.updateUniforms({ selectionActive: active })
+    }
+  }
+
+  updatePointShape(shape: PointShape): void {
+    this.config = { ...this.config, pointShape: shape }
+    for (const tile of this.tiles.values()) {
+      tile.updateUniforms({ pointShape: shape })
+    }
+  }
+
+  updateBlendMode(mode: BlendMode): void {
+    this.config = { ...this.config, blendMode: mode }
+    for (const tile of this.tiles.values()) {
+      tile.applyBlendMode(mode)
     }
   }
 
@@ -256,6 +277,7 @@ export class PointCloudRenderer {
     return {
       pointSize: this.config.pointSize,
       colorMode: this.config.colorMode,
+      pointShape: this.config.pointShape,
       heightMin: this.heightMin,
       heightMax: this.heightMax,
     }

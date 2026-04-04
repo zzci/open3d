@@ -1,6 +1,7 @@
 precision highp float;
 
 uniform int uColorMode;
+uniform int uPointShape; // 0 = hard circle (discard), 1 = gaussian splat
 uniform int uSelectionActive;
 uniform sampler2D uClassificationPalette;
 
@@ -28,13 +29,15 @@ vec3 heatmap(float t) {
 }
 
 void main() {
-  // Discard corners for round points
   vec2 coord = gl_PointCoord * 2.0 - 1.0;
-  if (dot(coord, coord) > 1.0) discard;
+  float r2 = dot(coord, coord);
 
-  // Selected points override to yellow
+  // Discard outside unit circle (both modes — saves fill on corners)
+  if (r2 > 1.0) discard;
+
+  // Selected points override to yellow (always opaque)
   if (uSelectionActive == 1 && vSelected > 0.5) {
-    gl_FragColor = vec4(1.0, 0.92, 0.23, 1.0); // bright yellow
+    gl_FragColor = vec4(1.0, 0.92, 0.23, 1.0);
     return;
   }
 
@@ -58,5 +61,13 @@ void main() {
     color = vec3(1.0);
   }
 
-  gl_FragColor = vec4(color, 1.0);
+  if (uPointShape == 0) {
+    // Hard circle — fully opaque
+    gl_FragColor = vec4(color, 1.0);
+  } else {
+    // Gaussian splat — smooth alpha falloff (σ ≈ 0.58, ~5% at edge)
+    float alpha = exp(-r2 * 3.0);
+    // Pre-multiplied alpha output for correct compositing
+    gl_FragColor = vec4(color * alpha, alpha);
+  }
 }

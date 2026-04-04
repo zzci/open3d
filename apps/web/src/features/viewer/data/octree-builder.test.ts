@@ -1,3 +1,4 @@
+import type { TileAttributes } from './octree-builder'
 import { describe, expect, it } from 'vitest'
 import {
   buildHierarchyNodes,
@@ -10,7 +11,6 @@ import {
   FLAG_HAS_COLOR,
   FLAG_HAS_INTENSITY,
 } from './octree-builder'
-import type { TileAttributes } from './octree-builder'
 
 // ---------------------------------------------------------------------------
 // Helpers

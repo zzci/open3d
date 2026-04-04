@@ -336,9 +336,23 @@ function decodePointRecord(
   }
 
   return {
-    x, y, z, intensity, returnNumber, numberOfReturns, classification,
-    scanAngle, userData, pointSourceId, classificationFlags, scannerChannel,
-    gpsTime, red, green, blue, nir,
+    x,
+    y,
+    z,
+    intensity,
+    returnNumber,
+    numberOfReturns,
+    classification,
+    scanAngle,
+    userData,
+    pointSourceId,
+    classificationFlags,
+    scannerChannel,
+    gpsTime,
+    red,
+    green,
+    blue,
+    nir,
   }
 }
 

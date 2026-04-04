@@ -1,10 +1,15 @@
 import type { TileData } from '../data/types'
 import type { ColorMode } from './color-modes'
 import {
+  AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  CustomBlending,
   DataTexture,
   FloatType,
+  NormalBlending,
+  OneFactor,
+  OneMinusSrcAlphaFactor,
   Points,
   RGBAFormat,
   ShaderMaterial,
@@ -29,6 +34,15 @@ function getClassificationPalette(): DataTexture {
 }
 
 // ---------------------------------------------------------------------------
+// Point shape & blend mode
+// ---------------------------------------------------------------------------
+
+export type PointShape = 'circle' | 'gaussian'
+export type BlendMode = 'opaque' | 'alpha' | 'additive'
+
+const POINT_SHAPE_VALUE: Record<PointShape, number> = { circle: 0, gaussian: 1 }
+
+// ---------------------------------------------------------------------------
 // Uniforms shared across all tile materials
 // ---------------------------------------------------------------------------
 
@@ -38,6 +52,7 @@ export interface PointUniforms {
   heightMin: number
   heightMax: number
   selectionActive?: number
+  pointShape?: PointShape
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +137,34 @@ export class TileMesh {
       u.uHeightMax!.value = uniforms.heightMax
     if (uniforms.selectionActive !== undefined)
       u.uSelectionActive!.value = uniforms.selectionActive
+    if (uniforms.pointShape !== undefined)
+      u.uPointShape!.value = POINT_SHAPE_VALUE[uniforms.pointShape]
+  }
+
+  /** Apply blend mode to this tile's material */
+  applyBlendMode(mode: BlendMode): void {
+    const m = this.material
+    switch (mode) {
+      case 'opaque':
+        m.blending = NormalBlending
+        m.depthWrite = true
+        m.transparent = false
+        break
+      case 'alpha':
+        // Pre-multiplied alpha: src×1 + dst×(1−srcAlpha)
+        m.blending = CustomBlending
+        m.blendSrc = OneFactor
+        m.blendDst = OneMinusSrcAlphaFactor
+        m.depthWrite = false
+        m.transparent = true
+        break
+      case 'additive':
+        m.blending = AdditiveBlending
+        m.depthWrite = false
+        m.transparent = true
+        break
+    }
+    m.needsUpdate = true
   }
 
   /** Update per-point selection mask from Uint8Array bitmask */
@@ -157,6 +200,7 @@ export class TileMesh {
       uniforms: {
         uPointSize: { value: uniforms.pointSize },
         uColorMode: { value: uniforms.colorMode },
+        uPointShape: { value: POINT_SHAPE_VALUE[uniforms.pointShape ?? 'circle'] },
         uHeightMin: { value: uniforms.heightMin },
         uHeightMax: { value: uniforms.heightMax },
         uSelectionActive: { value: uniforms.selectionActive ?? 0 },
