@@ -351,50 +351,52 @@ function ViewerPage() {
     }
   }, [editCount, showToast])
 
-  // Save — build a Set of surviving point positions, then filter original file
+  // Save — pick file FIRST (user gesture), then generate and write data
   const handleSave = useCallback(async () => {
     const file = fileRef.current
     const base = baseDataRef.current
     if (!file || !data || !base || data.count === base.count) { showToast(t('noEdits'), 'info'); return }
+
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
+    const suggestedName = `${baseName}_${ts}.las`
+
+    // Open save picker IMMEDIATELY in user gesture context (before any async work)
+    let fileHandle: any = null
+    if ('showSaveFilePicker' in window) {
+      try {
+        fileHandle = await (window as any).showSaveFilePicker({
+          suggestedName,
+          types: [{ description: 'LAS Point Cloud', accept: { 'application/octet-stream': ['.las'] } }],
+        })
+      }
+      catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        throw err
+      }
+    }
+
+    // Now do the slow work
     setLoading(true)
     setLoadText(`${t('saving')}...`)
     try {
-      // Build a set of surviving point position hashes for O(1) lookup
       const kept = new Set<string>()
       const dp = data.positions
       for (let i = 0; i < data.count; i++) {
-        // Use quantized position as key (avoids float precision issues)
         kept.add(`${(dp[i * 3]! * 1000) | 0},${(dp[i * 3 + 1]! * 1000) | 0},${(dp[i * 3 + 2]! * 1000) | 0}`)
       }
 
-      // Build ops that mark points not in `kept` for deletion
-      // We use a synthetic op where matrix=identity and rect covers everything,
-      // but override saveLAS to use our kept-set approach instead
       const blob = await saveFilteredLAS(file, kept, (pct) => {
         setProgress(pct)
         setLoadText(`${t('saving')}... ${(pct * 100) | 0}%`)
       })
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-      const baseName = (fileName || 'edited').replace(/\.las$/i, '').replace(/_\d{4}-\d{2}-\d{2}T[\d-]+$/, '')
-      const suggestedName = `${baseName}_${ts}.las`
 
-      // Try File System Access API (Chromium) — lets user pick folder
-      if ('showSaveFilePicker' in window) {
-        try {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName,
-            types: [{ description: 'LAS Point Cloud', accept: { 'application/octet-stream': ['.las'] } }],
-          })
-          const writable = await handle.createWritable()
-          await writable.write(blob)
-          await writable.close()
-          showToast(`${t('saved')} ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
-        }
-        catch (err: unknown) {
-          // User cancelled the picker
-          if (err instanceof DOMException && err.name === 'AbortError') return
-          throw err
-        }
+      if (fileHandle) {
+        // Write to user-picked location
+        const writable = await fileHandle.createWritable()
+        await writable.write(blob)
+        await writable.close()
+        showToast(`${t('saved')} ${suggestedName} (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
       }
       else {
         // Fallback: auto-download
