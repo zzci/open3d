@@ -381,8 +381,11 @@ export class DeckViewer {
       left: [0, 90],
     }
     const [rx, ro] = presets[preset] ?? [30, -30]
-    this.viewState = { ...this.viewState, target: [0, 0, 0], rotationX: rx, rotationOrbit: ro }
-    this.deck.setProps({ initialViewState: this.viewState as any })
+    this.viewState = { ...this.viewState, rotationX: rx, rotationOrbit: ro }
+    // Must set both initialViewState and viewState to force deck.gl to apply the change
+    this.deck.setProps({
+      initialViewState: { ...this.viewState, transitionDuration: 300 } as any,
+    })
   }
 
   /** Apply highlight overlay — selected points shown in orange */
