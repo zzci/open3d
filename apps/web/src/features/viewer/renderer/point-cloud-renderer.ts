@@ -1,5 +1,4 @@
 import type { TileData } from '../data/types'
-import type { EdlParams } from './post-processing/edl-pass'
 import type { BlendMode, PointShape, PointUniforms } from './tile-mesh'
 import {
   PerspectiveCamera,
@@ -8,7 +7,6 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { ColorMode } from './color-modes'
-import { RenderPipeline } from './post-processing/render-pipeline'
 import { disposeSharedResources, TileMesh } from './tile-mesh'
 
 // ---------------------------------------------------------------------------
@@ -45,14 +43,14 @@ class FpsTracker {
 // ---------------------------------------------------------------------------
 
 export interface RendererConfig {
-  pointSize: number
+  sizeMultiplier: number
   colorMode: ColorMode
   pointShape: PointShape
   blendMode: BlendMode
 }
 
 const DEFAULT_CONFIG: RendererConfig = {
-  pointSize: 2.0,
+  sizeMultiplier: 1.0,
   colorMode: ColorMode.RGB,
   pointShape: 'circle',
   blendMode: 'opaque',
@@ -71,7 +69,6 @@ export class PointCloudRenderer {
   private readonly tiles = new Map<string, TileMesh>()
   private readonly fpsTracker = new FpsTracker()
   private readonly resizeObserver: ResizeObserver
-  private readonly pipeline: RenderPipeline
 
   private animationFrameId = 0
   private lastFrameTime = 0
@@ -111,13 +108,6 @@ export class PointCloudRenderer {
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
     this.resizeObserver.observe(canvas)
     this.handleResize()
-
-    // Multi-pass render pipeline (EDL post-processing)
-    const { clientWidth: w, clientHeight: h } = canvas
-    this.pipeline = new RenderPipeline(
-      Math.max(1, w) * this.webglRenderer.getPixelRatio(),
-      Math.max(1, h) * this.webglRenderer.getPixelRatio(),
-    )
 
     // Start render loop
     this.lastFrameTime = performance.now()
@@ -163,10 +153,10 @@ export class PointCloudRenderer {
     }
   }
 
-  updatePointSize(size: number): void {
-    this.config = { ...this.config, pointSize: size }
+  updateSizeMultiplier(multiplier: number): void {
+    this.config = { ...this.config, sizeMultiplier: multiplier }
     for (const tile of this.tiles.values()) {
-      tile.updateUniforms({ pointSize: size })
+      tile.updateUniforms({ sizeMultiplier: multiplier })
     }
   }
 
@@ -200,14 +190,6 @@ export class PointCloudRenderer {
     for (const tile of this.tiles.values()) {
       tile.applyBlendMode(mode)
     }
-  }
-
-  updateEdlEnabled(enabled: boolean): void {
-    this.pipeline.edlEnabled = enabled
-  }
-
-  updateEdlParams(params: Partial<EdlParams>): void {
-    this.pipeline.updateEdlParams(params)
   }
 
   /** Expose tiles map for coarse AABB filtering in selection pipeline */
@@ -246,7 +228,6 @@ export class PointCloudRenderer {
       this.tiles.delete(id)
     }
 
-    this.pipeline.dispose()
     disposeSharedResources()
     this.webglRenderer.dispose()
   }
@@ -265,7 +246,7 @@ export class PointCloudRenderer {
     this.lastFrameTime = now
 
     this.controls.update()
-    this.pipeline.render(this.webglRenderer, this.scene, this.camera)
+    this.webglRenderer.render(this.scene, this.camera)
   }
 
   private handleResize(): void {
@@ -277,8 +258,10 @@ export class PointCloudRenderer {
     this.camera.updateProjectionMatrix()
     this.webglRenderer.setSize(w, h, false)
 
-    const dpr = this.webglRenderer.getPixelRatio()
-    this.pipeline.setSize(w * dpr, h * dpr)
+    // Broadcast updated screen height to all tile shaders
+    for (const tile of this.tiles.values()) {
+      tile.updateUniforms({ screenHeight: h })
+    }
   }
 
   private buildUniforms(data: TileData): PointUniforms {
@@ -296,8 +279,14 @@ export class PointCloudRenderer {
         this.heightMax = tileMaxY
     }
 
+    // FOV in radians for the vertex shader
+    const fovRad = (this.camera.fov * Math.PI) / 180
+
     return {
-      pointSize: this.config.pointSize,
+      nodeSpacing: data.spacing ?? 1.0,
+      sizeMultiplier: this.config.sizeMultiplier,
+      screenHeight: this.canvas.clientHeight || 600,
+      fov: fovRad,
       colorMode: this.config.colorMode,
       pointShape: this.config.pointShape,
       heightMin: this.heightMin,

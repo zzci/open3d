@@ -47,7 +47,10 @@ const POINT_SHAPE_VALUE: Record<PointShape, number> = { circle: 0, gaussian: 1 }
 // ---------------------------------------------------------------------------
 
 export interface PointUniforms {
-  pointSize: number
+  nodeSpacing: number
+  sizeMultiplier: number
+  screenHeight: number
+  fov: number
   colorMode: ColorMode
   heightMin: number
   heightMax: number
@@ -127,8 +130,14 @@ export class TileMesh {
   /** Update shared uniforms (called when user changes settings) */
   updateUniforms(uniforms: Partial<PointUniforms>): void {
     const u = this.material.uniforms
-    if (uniforms.pointSize !== undefined)
-      u.uPointSize!.value = uniforms.pointSize
+    if (uniforms.nodeSpacing !== undefined)
+      u.uNodeSpacing!.value = uniforms.nodeSpacing
+    if (uniforms.sizeMultiplier !== undefined)
+      u.uSizeMultiplier!.value = uniforms.sizeMultiplier
+    if (uniforms.screenHeight !== undefined)
+      u.uScreenHeight!.value = uniforms.screenHeight
+    if (uniforms.fov !== undefined)
+      u.uFov!.value = uniforms.fov
     if (uniforms.colorMode !== undefined)
       u.uColorMode!.value = uniforms.colorMode
     if (uniforms.heightMin !== undefined)
@@ -198,7 +207,10 @@ export class TileMesh {
       vertexShader,
       fragmentShader,
       uniforms: {
-        uPointSize: { value: uniforms.pointSize },
+        uNodeSpacing: { value: uniforms.nodeSpacing },
+        uSizeMultiplier: { value: uniforms.sizeMultiplier },
+        uScreenHeight: { value: uniforms.screenHeight },
+        uFov: { value: uniforms.fov },
         uColorMode: { value: uniforms.colorMode },
         uPointShape: { value: POINT_SHAPE_VALUE[uniforms.pointShape ?? 'circle'] },
         uHeightMin: { value: uniforms.heightMin },
