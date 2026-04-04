@@ -2,103 +2,142 @@
 import type { PointCloudData } from '@/features/viewer/renderer/deck-viewer'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadLAS } from '@/features/viewer/data/las-loader'
-import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
+import { DeckViewer, computeColors } from '@/features/viewer/renderer/deck-viewer'
+import { applyOp, loadLAS, saveLAS } from '@/features/viewer/data/las-loader'
+import type { EditOp } from '@/features/viewer/data/las-loader'
 
 export const Route = createFileRoute('/viewer')({
   component: ViewerPage,
 })
 
-type InteractionMode = 'navigate' | 'select'
+const MAX_PTS = [
+  { v: 500000, l: '500K' },
+  { v: 1000000, l: '1M' },
+  { v: 2000000, l: '2M' },
+  { v: 3000000, l: '3M' },
+  { v: 5000000, l: '5M' },
+  { v: 8000000, l: '8M' },
+  { v: 10000000, l: '10M' },
+]
 
-const COLOR_MODES = ['intensity', 'rgb', 'height', 'heightIntensity', 'white'] as const
-const COLOR_LABELS: Record<string, string> = {
-  intensity: 'Intensity',
-  rgb: 'RGB',
-  height: 'Height',
-  heightIntensity: 'Height × Intensity',
-  white: 'White',
-}
+const VIEWS = ['persp', 'top', 'bottom', 'front', 'back', 'right', 'left'] as const
+const COLOR_MODES = [
+  { v: 'rgb', l: 'RGB' },
+  { v: 'intensity', l: 'Intensity' },
+  { v: 'height', l: 'Height' },
+  { v: 'heightIntensity', l: 'Height+Int' },
+  { v: 'edl', l: 'Warm Light' },
+  { v: 'white', l: 'White' },
+]
+
+type InteractionMode = 'navigate' | 'select'
+interface SelectionInfo { matrix: number[], rect: [number, number, number, number], vpWidth: number, vpHeight: number }
 
 function ViewerPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<DeckViewer | null>(null)
-  const dataRef = useRef<PointCloudData | null>(null)
   const rectRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef({ active: false, sx: 0, sy: 0 })
+  const fileRef = useRef<File | null>(null)
+  const opsRef = useRef<EditOp[]>([])
+  const baseDataRef = useRef<PointCloudData | null>(null)
+  const selectionRef = useRef<SelectionInfo | null>(null)
 
-  const [loaded, setLoaded] = useState(false)
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [data, setData] = useState<PointCloudData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadText, setLoadText] = useState('')
   const [progress, setProgress] = useState(0)
-  const [fileName, setFileName] = useState('')
-  const [pointCount, setPointCount] = useState(0)
-  const [colorMode, setColorMode] = useState<string>('intensity')
+  const [toast, setToast] = useState<{ msg: string, type: string } | null>(null)
   const [pointSize, setPointSize] = useState(1.0)
+  const [maxPoints, setMaxPoints] = useState(3000000)
+  const [colorMode, setColorMode] = useState('rgb')
+  const [viewPreset, setViewPreset] = useState<string | null>('persp')
   const [mode, setMode] = useState<InteractionMode>('navigate')
+  const [hasSelection, setHasSelection] = useState(false)
   const [selectedCount, setSelectedCount] = useState(0)
-  const [lastSelection, setLastSelection] = useState<{ matrix: number[], rect: [number, number, number, number], vpWidth: number, vpHeight: number } | null>(null)
+  const [totalPoints, setTotalPoints] = useState(0)
+  const [editCount, setEditCount] = useState(0)
 
-  // Init deck.gl viewer
+  const showToast = useCallback((msg: string, type = 'info') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  // Init deck.gl
   useEffect(() => {
-    if (!containerRef.current)
-      return
+    if (!containerRef.current) return
     const viewer = new DeckViewer(containerRef.current, { colorMode, pointSizeMultiplier: pointSize })
     viewerRef.current = viewer
-    return () => {
-      viewer.dispose()
-      viewerRef.current = null
-    }
+    return () => { viewer.dispose(); viewerRef.current = null }
   // eslint-disable-next-line react/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    viewerRef.current?.setColorMode(colorMode)
-  }, [colorMode])
-  useEffect(() => {
-    viewerRef.current?.setPointSize(pointSize)
-  }, [pointSize])
-  useEffect(() => {
-    viewerRef.current?.setController(mode === 'navigate')
-  }, [mode])
+  // Sync settings
+  useEffect(() => { viewerRef.current?.setColorMode(colorMode) }, [colorMode])
+  useEffect(() => { viewerRef.current?.setPointSize(pointSize) }, [pointSize])
+  useEffect(() => { viewerRef.current?.setController(mode === 'navigate') }, [mode])
+  useEffect(() => { if (viewPreset) viewerRef.current?.setViewPreset(viewPreset) }, [viewPreset])
 
-  const handleFile = useCallback(async (file: File) => {
+  // Re-derive display data by replaying all ops on base
+  const deriveData = useCallback((base: PointCloudData, ops: EditOp[]): PointCloudData => {
+    let d = base
+    for (const op of ops) d = applyOp(d, op).result
+    return d
+  }, [])
+
+  const doLoad = useCallback(async (file: File, mp: number) => {
     setLoading(true)
+    setLoadText(`Loading ${file.name}...`)
     setProgress(0)
-    setFileName(file.name)
-    setSelectedCount(0)
-    setLastSelection(null)
     try {
-      const data = await loadLAS(file, 10_000_000, pct => setProgress(Math.round(pct * 100)))
-      dataRef.current = data
-      viewerRef.current?.setData(data)
-      setPointCount(data.count)
-      setLoaded(true)
-    }
-    catch (err) {
-      console.error('Failed to load:', err)
+      const pd = await loadLAS(file, mp, (pct) => {
+        setProgress(pct)
+        setLoadText(`Loading... ${(pct * 100) | 0}%`)
+      })
+      baseDataRef.current = pd
+      const derived = deriveData(pd, opsRef.current)
+      setData(derived)
+      setTotalPoints(pd.count)
+      viewerRef.current?.setData(derived)
+      setViewPreset('persp')
+      return derived
     }
     finally {
       setLoading(false)
     }
-  }, [])
+  }, [deriveData])
+
+  const handleFile = useCallback(async (file: File) => {
+    fileRef.current = file
+    opsRef.current = []
+    setEditCount(0)
+    selectionRef.current = null
+    setHasSelection(false)
+    setFileName(file.name)
+    const pd = await doLoad(file, maxPoints)
+    if (pd) showToast(`Loaded ${file.name} (${pd.count.toLocaleString()} pts)`, 'success')
+  }, [maxPoints, doLoad, showToast])
+
+  const handleMaxPointsChange = useCallback(async (v: number) => {
+    setMaxPoints(v)
+    if (fileRef.current) await doLoad(fileRef.current, v)
+  }, [doLoad])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
-    if (file)
-      handleFile(file)
+    if (file) handleFile(file)
   }, [handleFile])
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file)
-      handleFile(file)
+    if (file) handleFile(file)
   }, [handleFile])
 
   // Selection
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    if (mode !== 'select' || e.button !== 0)
-      return
+    if (mode !== 'select' || e.button !== 0) return
     const r = containerRef.current!.getBoundingClientRect()
     dragRef.current = { active: true, sx: e.clientX - r.left, sy: e.clientY - r.top }
     const rect = rectRef.current!
@@ -110,11 +149,9 @@ function ViewerPage() {
   }, [mode])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current.active)
-      return
+    if (!dragRef.current.active) return
     const r = containerRef.current!.getBoundingClientRect()
-    const cx = e.clientX - r.left
-    const cy = e.clientY - r.top
+    const cx = e.clientX - r.left, cy = e.clientY - r.top
     const rect = rectRef.current!
     rect.style.left = `${Math.min(dragRef.current.sx, cx)}px`
     rect.style.top = `${Math.min(dragRef.current.sy, cy)}px`
@@ -123,116 +160,148 @@ function ViewerPage() {
   }, [])
 
   const onMouseUp = useCallback((e: React.MouseEvent) => {
-    if (!dragRef.current.active)
-      return
+    if (!dragRef.current.active) return
     dragRef.current.active = false
     rectRef.current!.style.display = 'none'
-    const data = dataRef.current
     const viewer = viewerRef.current
-    if (!data || !viewer)
-      return
+    if (!data || !viewer) return
     const r = containerRef.current!.getBoundingClientRect()
-    const cx = e.clientX - r.left
-    const cy = e.clientY - r.top
-    const L = Math.min(dragRef.current.sx, cx)
-    const T = Math.min(dragRef.current.sy, cy)
-    const R = Math.max(dragRef.current.sx, cx)
-    const B = Math.max(dragRef.current.sy, cy)
-    if (R - L < 5 || B - T < 5)
-      return
+    const cx = e.clientX - r.left, cy = e.clientY - r.top
+    const L = Math.min(dragRef.current.sx, cx), T = Math.min(dragRef.current.sy, cy)
+    const R = Math.max(dragRef.current.sx, cx), B = Math.max(dragRef.current.sy, cy)
+    if (R - L < 5 || B - T < 5) return
     const m = viewer.getViewProjectionMatrix()
-    if (!m)
-      return
+    if (!m) return
     const { width: vpW, height: vpH } = viewer.getViewportSize()
-    const pos = data.positions
-    const hl = new Uint8Array(data.count)
+    const pos = data.positions, n = data.count
+    const hl = new Uint8Array(n)
     let found = 0
-    for (let i = 0; i < data.count; i++) {
-      const px = pos[i * 3]!; const py = pos[i * 3 + 1]!; const pz = pos[i * 3 + 2]!
+    for (let i = 0; i < n; i++) {
+      const px = pos[i * 3]!, py = pos[i * 3 + 1]!, pz = pos[i * 3 + 2]!
       const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
-      if (cw <= 0)
-        continue
+      if (cw <= 0) continue
       const sx = ((m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) / cw * 0.5 + 0.5) * vpW
       const sy = (0.5 - (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) / cw * 0.5) * vpH
-      if (sx >= L && sx <= R && sy >= T && sy <= B) {
-        hl[i] = 1
-        found++
-      }
+      if (sx >= L && sx <= R && sy >= T && sy <= B) { hl[i] = 1; found++ }
     }
-    if (!found)
-      return
+    if (!found) return
     viewer.setHighlight(hl)
     setSelectedCount(found)
-    setLastSelection({ matrix: m, rect: [L, T, R, B], vpWidth: vpW, vpHeight: vpH })
-  }, [mode])
+    setHasSelection(true)
+    selectionRef.current = { matrix: m, rect: [L, T, R, B], vpWidth: vpW, vpHeight: vpH }
+  }, [data, mode])
 
-  // Edit
-  const handleDelete = useCallback((keepInside: boolean) => {
-    const data = dataRef.current
-    const viewer = viewerRef.current
-    const sel = lastSelection
-    if (!data || !viewer || !sel)
-      return
-    const { matrix: m, rect: [L, T, R, B], vpWidth: w, vpHeight: h } = sel
-    const pos = data.positions
-    const n = data.count
-    let removed = 0
-    const bitmap = new Uint8Array(n)
-    for (let i = 0; i < n; i++) {
-      const px = pos[i * 3]!; const py = pos[i * 3 + 1]!; const pz = pos[i * 3 + 2]!
-      const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
-      if (cw <= 0) {
-        if (keepInside) { bitmap[i] = 1; removed++ }
-        continue
-      }
-      const sx = ((m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) / cw * 0.5 + 0.5) * w
-      const sy = (0.5 - (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) / cw * 0.5) * h
-      const inside = sx >= L && sx <= R && sy >= T && sy <= B
-      if (keepInside ? !inside : inside) { bitmap[i] = 1; removed++ }
-    }
-    if (removed === 0)
-      return
-    const nn = n - removed
-    const np = new Float32Array(nn * 3)
-    const nc = new Uint8Array(nn * 3)
-    const ni = new Uint8Array(nn)
-    let j = 0
-    for (let i = 0; i < n; i++) {
-      if (bitmap[i])
-        continue
-      np[j * 3] = data.positions[i * 3]!
-      np[j * 3 + 1] = data.positions[i * 3 + 1]!
-      np[j * 3 + 2] = data.positions[i * 3 + 2]!
-      nc[j * 3] = data.colors[i * 3]!
-      nc[j * 3 + 1] = data.colors[i * 3 + 1]!
-      nc[j * 3 + 2] = data.colors[i * 3 + 2]!
-      ni[j] = data.intensity[i]!
-      j++
-    }
-    const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
-    dataRef.current = newData
-    viewer.setHighlight(null)
-    viewer.setData(newData)
-    setPointCount(nn)
+  const clearSelection = useCallback(() => {
+    selectionRef.current = null
+    setHasSelection(false)
     setSelectedCount(0)
-    setLastSelection(null)
-  }, [lastSelection])
-
-  const handleClear = useCallback(() => {
     viewerRef.current?.setHighlight(null)
-    setSelectedCount(0)
-    setLastSelection(null)
   }, [])
 
+  // Delete/Keep
+  const handleDelete = useCallback((keep: boolean) => {
+    const sel = selectionRef.current
+    if (!sel || !data) return
+    const op: EditOp = { matrix: sel.matrix, rect: sel.rect, vpWidth: sel.vpWidth, vpHeight: sel.vpHeight, keepInside: keep }
+    opsRef.current.push(op)
+    const { result, removedCount } = applyOp(data, op)
+    setData(result)
+    viewerRef.current?.setHighlight(null)
+    viewerRef.current?.setData(result)
+    setEditCount(opsRef.current.length)
+    showToast(`${keep ? 'Kept, removed' : 'Deleted'} ${removedCount.toLocaleString()} pts`, 'success')
+    selectionRef.current = null
+    setHasSelection(false)
+  }, [data, showToast])
+
+  // Undo
+  const handleUndo = useCallback(() => {
+    if (!opsRef.current.length || !baseDataRef.current) { showToast('Nothing to undo', 'info'); return }
+    opsRef.current.pop()
+    const derived = deriveData(baseDataRef.current, opsRef.current)
+    setData(derived)
+    viewerRef.current?.setData(derived)
+    setEditCount(opsRef.current.length)
+    showToast('Undone', 'success')
+  }, [deriveData, showToast])
+
+  // Save
+  const handleSave = useCallback(async () => {
+    const file = fileRef.current
+    if (!file || !opsRef.current.length) { showToast('No edits', 'info'); return }
+    setLoading(true)
+    setLoadText('Saving...')
+    try {
+      const blob = await saveLAS(file, opsRef.current, (pct) => {
+        setProgress(pct)
+        setLoadText(`Saving... ${(pct * 100) | 0}%`)
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName?.replace('.las', '_edited.las') || 'edited.las'
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast(`Saved (${(blob.size / 1e6).toFixed(1)} MB)`, 'success')
+    }
+    catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Save failed', 'error')
+    }
+    finally {
+      setLoading(false)
+    }
+  }, [fileName, showToast])
+
+  // Auto color for grayscale
+  useEffect(() => {
+    if (data?.isGrayscale && colorMode === 'rgb') setColorMode('heightIntensity')
+  }, [data?.isGrayscale, colorMode])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (['INPUT', 'SELECT'].includes((e.target as HTMLElement).tagName)) return
+      if (e.key === 's' && !e.ctrlKey && !e.metaKey) { setMode(m => m === 'select' ? 'navigate' : 'select'); e.preventDefault() }
+      if (e.key === 'Escape') clearSelection()
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { handleUndo(); e.preventDefault() }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      const vk: Record<string, string> = { 1: 'persp', 2: 'top', 3: 'bottom', 4: 'front', 5: 'right', 6: 'back', 7: 'left' }
+      if (vk[e.key]) setViewPreset(vk[e.key]!)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [handleUndo, handleSave, clearSelection])
+
+  // Global drag-drop
+  useEffect(() => {
+    const prevent = (e: DragEvent) => { e.preventDefault(); e.stopPropagation() }
+    const drop = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const f = e.dataTransfer?.files[0]
+      if (f && /\.la[sz]$/i.test(f.name)) handleFile(f)
+    }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', drop)
+    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', drop) }
+  }, [handleFile])
+
   return (
-    <div className="relative h-screen w-screen">
-      {/* deck.gl container — always mounted so useEffect can init Deck */}
-      <div ref={containerRef} className="absolute inset-0" style={{ cursor: mode === 'select' ? 'crosshair' : 'default' }} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} />
+    <div className="relative h-screen w-screen bg-neutral-100">
+      {/* deck.gl container */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ cursor: mode === 'select' ? 'crosshair' : 'default' }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+      />
       <div ref={rectRef} className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/10" style={{ display: 'none' }} />
 
       {/* File opener overlay */}
-      {!loaded && !loading && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-neutral-100" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+      {!fileName && !loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-neutral-100">
           <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-neutral-300 p-12">
             <h1 className="text-2xl font-bold text-neutral-700">Open3D Point Cloud Viewer</h1>
             <p className="text-sm text-neutral-500">Drag & drop a .las file, or click to browse</p>
@@ -244,66 +313,96 @@ function ViewerPage() {
         </div>
       )}
 
+      {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80">
           <div className="flex flex-col items-center gap-3">
-            <div className="text-lg font-medium">
-              Loading
-              {' '}
-              {fileName}
-              ...
-            </div>
-            <div className="h-2 w-64 overflow-hidden rounded-full bg-neutral-200">
-              <div className="h-full rounded-full bg-neutral-800 transition-[width]" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="text-sm text-neutral-500">
-              {progress}
-              %
-            </div>
+            <div className="text-lg font-medium">{loadText}</div>
+            {progress > 0 && progress < 1 && (
+              <div className="h-2 w-64 overflow-hidden rounded-full bg-neutral-200">
+                <div className="h-full rounded-full bg-neutral-800 transition-[width]" style={{ width: `${progress * 100}%` }} />
+              </div>
+            )}
           </div>
         </div>
       )}
-      {loaded && (
-        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-white/90 px-4 py-2 shadow-sm backdrop-blur-sm">
-          <select className="rounded border px-2 py-1 text-xs" value={colorMode} onChange={e => setColorMode(e.target.value)}>
-            {COLOR_MODES.map(m => <option key={m} value={m}>{COLOR_LABELS[m]}</option>)}
-          </select>
-          <div className="h-4 w-px bg-neutral-300" />
-          <label className="flex items-center gap-1 text-xs text-neutral-600">
-            Size
-            <input type="range" min="0.3" max="3" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
-          </label>
-          <div className="h-4 w-px bg-neutral-300" />
-          <button className={`rounded px-3 py-1 text-xs ${mode === 'select' ? 'bg-blue-600 text-white' : 'bg-neutral-200'}`} onClick={() => setMode(mode === 'navigate' ? 'select' : 'navigate')}>
-            {mode === 'select' ? 'Select Mode' : 'Navigate'}
-          </button>
-          {selectedCount > 0 && (
-            <>
-              <span className="text-xs text-neutral-500">
-                {selectedCount.toLocaleString()}
-                {' '}
-                pts
-              </span>
-              <button className="rounded bg-red-600 px-2 py-1 text-xs text-white" onClick={() => handleDelete(false)}>Delete</button>
-              <button className="rounded bg-green-600 px-2 py-1 text-xs text-white" onClick={() => handleDelete(true)}>Keep</button>
-              <button className="rounded bg-neutral-200 px-2 py-1 text-xs" onClick={handleClear}>Clear</button>
-            </>
-          )}
-          <div className="h-4 w-px bg-neutral-300" />
-          <label className="cursor-pointer rounded bg-neutral-200 px-2 py-1 text-xs hover:bg-neutral-300">
-            Open
+
+      {/* Toolbar */}
+      {fileName && (
+        <div className="absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-white/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+          <label className="cursor-pointer rounded bg-neutral-200 px-2 py-1 hover:bg-neutral-300">
+            {fileName}
             <input type="file" accept=".las,.laz" className="hidden" onChange={handleInputChange} />
           </label>
+
+          <div className="h-4 w-px bg-neutral-300" />
+
+          {/* View presets */}
+          {VIEWS.map(v => (
+            <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-neutral-800 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setViewPreset(v)}>
+              {v}
+            </button>
+          ))}
+
+          <div className="h-4 w-px bg-neutral-300" />
+
+          {/* Nav/Select mode */}
+          <button className={`rounded px-2 py-0.5 ${mode === 'navigate' ? 'bg-neutral-800 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setMode('navigate')}>Nav</button>
+          <button className={`rounded px-2 py-0.5 ${mode === 'select' ? 'bg-blue-600 text-white' : 'hover:bg-neutral-200'}`} onClick={() => setMode('select')}>Sel</button>
+
+          <div className="h-4 w-px bg-neutral-300" />
+
+          {/* Point size */}
+          <span className="text-neutral-500">Size</span>
+          <input type="range" min="0.5" max="5" step="0.1" value={pointSize} onChange={e => setPointSize(Number(e.target.value))} className="w-16" />
+          <span className="tabular-nums text-neutral-500">{pointSize}x{data ? ` (${(data.avgSpacing * pointSize * 1000).toFixed(1)}mm)` : ''}</span>
+
+          {/* Max points */}
+          <span className="text-neutral-500">Pts</span>
+          <select value={maxPoints} onChange={e => handleMaxPointsChange(Number(e.target.value))} className="rounded border px-1 py-0.5">
+            {MAX_PTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+          </select>
+
+          {/* Color mode */}
+          <select value={colorMode} onChange={e => setColorMode(e.target.value)} className="rounded border px-1 py-0.5">
+            {COLOR_MODES.map(m => <option key={m.v} value={m.v}>{data?.isGrayscale && m.v === 'rgb' ? 'Intensity' : m.l}</option>)}
+          </select>
+
+          <div className="flex-1" />
+
+          {/* Selection actions */}
+          {hasSelection && (
+            <>
+              <span className="text-orange-500">~{selectedCount.toLocaleString()}</span>
+              <button className="rounded bg-red-600 px-2 py-0.5 text-white" onClick={() => handleDelete(false)}>Delete</button>
+              <button className="rounded bg-green-600 px-2 py-0.5 text-white" onClick={() => handleDelete(true)}>Keep</button>
+              <button className="rounded bg-neutral-200 px-2 py-0.5" onClick={clearSelection}>Esc</button>
+            </>
+          )}
+
+          {/* Edit actions */}
+          {editCount > 0 && <span className="text-yellow-500">{editCount} edit{editCount > 1 ? 's' : ''}</span>}
+          <button className="rounded bg-neutral-200 px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>Undo</button>
+          <button className="rounded bg-blue-600 px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>Save</button>
         </div>
       )}
-      {loaded && (
-        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-white/90 px-4 py-1.5 text-xs text-neutral-600 shadow-sm backdrop-blur-sm">
-          {fileName}
-          {' '}
-          ·
-          {pointCount.toLocaleString()}
-          {' '}
-          points
+
+      {/* Status bar */}
+      {fileName && (
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-3 rounded-lg bg-white/90 px-4 py-1.5 text-xs text-neutral-600 shadow-sm backdrop-blur-sm">
+          <span>{fileName}</span>
+          <span>Total: {totalPoints.toLocaleString()}</span>
+          <span>Display: {data?.count.toLocaleString() || '-'}</span>
+          {editCount > 0 && <span className="text-yellow-500">Unsaved: {editCount}</span>}
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`absolute left-1/2 top-14 z-50 -translate-x-1/2 rounded px-4 py-2 text-sm text-white shadow-lg ${
+          toast.type === 'success' ? 'bg-green-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-neutral-700'
+        }`}>
+          {toast.msg}
         </div>
       )}
     </div>
