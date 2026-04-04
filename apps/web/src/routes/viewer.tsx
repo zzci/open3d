@@ -31,7 +31,21 @@ const COLOR_MODES = [
 ]
 
 type InteractionMode = 'navigate' | 'select'
-interface SelectionInfo { vp: { project: (pos: number[]) => number[] }, rect: [number, number, number, number] }
+interface SelectionInfo { m: Float64Array, w: number, h: number, rect: [number, number, number, number] }
+
+/**
+ * Fast inline projection: pixelProjectionMatrix × point → pixel coords.
+ * Returns screen x,y or null if behind camera. Zero allocations per call.
+ */
+function projectToScreen(m: Float64Array, px: number, py: number, pz: number): { sx: number, sy: number } | null {
+  const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
+  if (cw <= 0) return null
+  const invW = 1 / cw
+  return {
+    sx: (m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) * invW,
+    sy: (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) * invW,
+  }
+}
 
 function ViewerPage() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -170,21 +184,20 @@ function ViewerPage() {
     const L = Math.min(dragRef.current.sx, cx), T = Math.min(dragRef.current.sy, cy)
     const R = Math.max(dragRef.current.sx, cx), B = Math.max(dragRef.current.sy, cy)
     if (R - L < 5 || B - T < 5) return
-    const vp = viewer.getViewport()
-    if (!vp) return
+    const pm = viewer.getPixelProjectionMatrix()
+    if (!pm) return
     const pos = data.positions, n = data.count
     const hl = new Uint8Array(n)
     let found = 0
     for (let i = 0; i < n; i++) {
-      const screenPos = vp.project([pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!])
-      const sx = screenPos[0]!, sy = screenPos[1]!
-      if (sx >= L && sx <= R && sy >= T && sy <= B) { hl[i] = 1; found++ }
+      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
+      if (p && p.sx >= L && p.sx <= R && p.sy >= T && p.sy <= B) { hl[i] = 1; found++ }
     }
     if (!found) return
     viewer.setHighlight(hl)
     setSelectedCount(found)
     setHasSelection(true)
-    selectionRef.current = { vp, rect: [L, T, R, B] }
+    selectionRef.current = { m: pm, w: 0, h: 0, rect: [L, T, R, B] }
   }, [data, mode])
 
   const clearSelection = useCallback(() => {
@@ -199,15 +212,14 @@ function ViewerPage() {
     const sel = selectionRef.current
     if (!sel || !data) return
     const [L, T, R, B] = sel.rect
-    const { vp } = sel
+    const { m: pm } = sel
     const pos = data.positions, n = data.count
 
-    // Determine which points to remove using viewport projection
     let removed = 0
     const bitmap = new Uint8Array(n)
     for (let i = 0; i < n; i++) {
-      const sp = vp.project([pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!])
-      const inside = sp[0]! >= L && sp[0]! <= R && sp[1]! >= T && sp[1]! <= B
+      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
+      const inside = p ? (p.sx >= L && p.sx <= R && p.sy >= T && p.sy <= B) : false
       const shouldDelete = keep ? !inside : inside
       if (shouldDelete) { bitmap[i] = 1; removed++ }
     }
@@ -233,13 +245,10 @@ function ViewerPage() {
 
     const newData: PointCloudData = { positions: np, colors: nc, intensity: ni, count: nn, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
 
-    // Store as EditOp for undo (use current viewport matrix)
-    const m = Array.from((vp as unknown as { viewProjectionMatrix: number[] }).viewProjectionMatrix ?? [])
+    // Store EditOp for undo replay (uses projection matrix from selection time)
     const vpSize = viewerRef.current?.getViewportSize()
-    if (m.length && vpSize) {
-      const op: EditOp = { matrix: m, rect: sel.rect, vpWidth: vpSize.width, vpHeight: vpSize.height, keepInside: keep }
-      opsRef.current.push(op)
-    }
+    const op: EditOp = { matrix: Array.from(pm), rect: sel.rect, vpWidth: vpSize?.width ?? 0, vpHeight: vpSize?.height ?? 0, keepInside: keep }
+    opsRef.current.push(op)
 
     setData(newData)
     viewerRef.current?.setHighlight(null)

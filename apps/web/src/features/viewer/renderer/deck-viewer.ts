@@ -400,6 +400,15 @@ export class DeckViewer {
     return vps[0] as { project: (pos: number[]) => number[] }
   }
 
+  /** Get pixel projection matrix — projects world coords directly to CSS pixel coords */
+  getPixelProjectionMatrix(): Float64Array | null {
+    const vps = this.deck.getViewports()
+    if (!vps?.length) return null
+    const vp = vps[0] as { pixelProjectionMatrix: number[] }
+    if (!vp.pixelProjectionMatrix) return null
+    return new Float64Array(vp.pixelProjectionMatrix)
+  }
+
   getViewportSize(): { width: number, height: number } {
     return { width: this.container.clientWidth, height: this.container.clientHeight }
   }
