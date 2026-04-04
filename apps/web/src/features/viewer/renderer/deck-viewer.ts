@@ -6,7 +6,7 @@
  */
 
 import { COORDINATE_SYSTEM, Deck, OrbitView } from '@deck.gl/core'
-import { LineLayer, PointCloudLayer } from '@deck.gl/layers'
+import { LineLayer, PointCloudLayer, ScatterplotLayer } from '@deck.gl/layers'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -469,23 +469,25 @@ export class DeckViewer {
           getWidth: 3,
           widthUnits: 'pixels' as const,
         }),
-        new PointCloudLayer({
+        new ScatterplotLayer({
           id: 'points',
           coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
           data: {
             length: this.data.count,
             attributes: {
               getPosition: { value: this.data.positions, size: 3 },
-              getColor: { value: this.colorBuf, size: 3 },
-              getNormal: { value: this.normalsBuf, size: 3 },
+              getFillColor: { value: this.colorBuf, size: 3 },
             },
           },
-          // radiusPixels: small radius = fewer fragments = much faster
-          // 6M points × π×r² pixels each: r=1 → 19M frags, r=3 → 170M frags
-          radiusPixels: this.config.pointSizeMultiplier,
-          material: false,
+          // Fixed pixel radius — does NOT scale with zoom
+          radiusUnits: 'pixels' as any,
+          getRadius: this.config.pointSizeMultiplier,
+          radiusMinPixels: 1,
+          radiusMaxPixels: 10,
+          stroked: false,
+          antialiasing: false,
           updateTriggers: {
-            getColor: this.colorVersion,
+            getFillColor: this.colorVersion,
           },
         }),
       ],
