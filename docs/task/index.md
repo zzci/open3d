@@ -33,12 +33,12 @@ Each task is a single line linking to its detail file. All detailed information 
 
 - [x] [**FEAT-001 Initialize web frontend project**](FEAT-001.md) `P1`
 - [x] [**FEAT-002 Implement file access layer**](FEAT-002.md) `P1`
-- [ ] [**FEAT-003 COPC metadata and hierarchy parsing**](FEAT-003.md) `P1`
+- [x] [**FEAT-003 COPC metadata and hierarchy parsing**](FEAT-003.md) `P1`
 - [ ] [**FEAT-004 Tile decode Worker**](FEAT-004.md) `P1`
 - [ ] [**FEAT-005 Client tile scheduler**](FEAT-005.md) `P1`
 - [ ] [**FEAT-006 Three.js WebGL2 point cloud renderer**](FEAT-006.md) `P1`
 - [ ] [**FEAT-007 Basic viewer UI**](FEAT-007.md) `P1`
-- [ ] [**FEAT-008 LAS/LAZ header parsing and decompression**](FEAT-008.md) `P2`
+- [x] [**FEAT-008 LAS/LAZ header parsing and decompression**](FEAT-008.md) `P2`
 - [ ] [**FEAT-009 Local indexing Worker for LAS/LAZ**](FEAT-009.md) `P2`
 - [x] [**FEAT-010 OPFS cache layer**](FEAT-010.md) `P2`
 - [ ] [**FEAT-011 Selection system**](FEAT-011.md) `P2`

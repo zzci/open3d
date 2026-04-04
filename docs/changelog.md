@@ -1,8 +1,11 @@
 # Changelog
 
-## 2026-04-04 [progress]
+## 2026-04-04 01:20 [progress]
 
-FEAT-010 complete: OPFS cache layer — tile/metadata/hierarchy binary storage via OPFS, IndexedDB dataset registry with edit log store, LRU eviction at dataset level (2 GB default), cache manager dialog UI.
+Merged FEAT-003, FEAT-008, FEAT-010:
+- FEAT-003: COPC metadata parsing + hierarchy tree + metadata Worker
+- FEAT-008: Custom LAS/LAZ parser (LAS 1.2-1.4, point formats 0-10) + laz-perf WASM + tests
+- FEAT-010: OPFS cache layer + IndexedDB registry + LRU eviction + cache manager dialog
 
 ## 2026-04-04 01:05 [progress]
 
