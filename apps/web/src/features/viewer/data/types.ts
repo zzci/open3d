@@ -107,6 +107,25 @@ export interface DecodeTilePayload {
   offset: [number, number, number]
 }
 
+// --- Indexing worker specific messages ---
+
+export interface IndexingPayload {
+  file: File
+  datasetId: string
+}
+
+export interface IndexingProgress {
+  pointsProcessed: number
+  totalPoints: number
+  phase: string
+  estimatedRemaining: number // ms, -1 if unknown
+}
+
+export interface IndexingResult {
+  descriptor: DatasetDescriptor
+  hierarchy: OctreeNode[]
+}
+
 export const POINT_FORMAT_ATTRIBUTES: Record<number, string[]> = {
   0: ['x', 'y', 'z', 'intensity', 'return_number', 'classification'],
   1: ['x', 'y', 'z', 'intensity', 'return_number', 'classification', 'gps_time'],
