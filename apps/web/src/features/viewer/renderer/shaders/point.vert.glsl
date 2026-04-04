@@ -37,6 +37,13 @@ void main() {
   float projFactor = uScreenHeight / (2.0 * tan(uFov * 0.5));
   float size = uNodeSpacing * projFactor / (-mvPosition.z) * uSizeMultiplier * uRenderModeSizing;
 
+  // aSelected > 1.5 means "deleted" — hide completely
+  if (aSelected > 1.5) {
+    gl_PointSize = 0.0;
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // off-screen
+    return;
+  }
+
   // Selected points are 1.5× larger
   if (uSelectionActive == 1 && aSelected > 0.5) {
     size *= 1.5;
