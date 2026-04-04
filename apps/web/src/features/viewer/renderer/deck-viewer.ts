@@ -332,7 +332,7 @@ export class DeckViewer {
       target: [0, 0, 0],
       rotationX: 30,
       rotationOrbit: -30,
-      zoom: Math.log2(1600 / bSize),
+      zoom: Math.log2(3200 / bSize),
     }
     this.deck.setProps({ initialViewState: this.viewState as any })
     this.recomputeColors()
