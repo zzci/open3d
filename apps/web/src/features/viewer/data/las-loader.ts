@@ -77,7 +77,7 @@ export async function loadLAS(
   }
 
   const cx = (xMin + xMax) / 2; const cy = (yMin + yMax) / 2; const cz = (zMin + zMax) / 2
-  const cap = maxPoints > 0 ? maxPoints : 10_000_000
+  const cap = maxPoints > 0 ? maxPoints : numPts
   const step = numPts > cap ? Math.ceil(numPts / cap) : 1
   const targetN = Math.ceil(numPts / step)
 
