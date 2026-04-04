@@ -327,21 +327,6 @@ export class DeckViewer {
     this.recomputeColors()
     this.updateLayers()
 
-    // Compute actual centroid from point positions (not bounding box center)
-    const pos = data.positions
-    let cx = 0, cy = 0, cz = 0
-    const sampleStep = Math.max(1, Math.floor(data.count / 10000))
-    let sampleCount = 0
-    for (let i = 0; i < data.count; i += sampleStep) {
-      cx += pos[i * 3]!
-      cy += pos[i * 3 + 1]!
-      cz += pos[i * 3 + 2]!
-      sampleCount++
-    }
-    cx /= sampleCount
-    cy /= sampleCount
-    cz /= sampleCount
-
     // Fit to viewport after deck.gl has rendered and container has real dimensions
     const fitToView = () => {
       const { xn, xx, yn, yx, zn, zx } = data.bounds
@@ -354,7 +339,7 @@ export class DeckViewer {
       }
       this.viewState = {
         ...this.viewState,
-        target: [cx, cy, cz],
+        target: [0, 0, 0],
         rotationX: 30,
         rotationOrbit: -30,
         zoom: Math.log2(Math.min(vpW, vpH) * 0.8 / bSize),
