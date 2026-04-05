@@ -115,11 +115,20 @@ function ViewerPage() {
     setLoadText(`${t('loading')} ${file.name}...`)
     setProgress(0)
     try {
+      const ext = file.name.toLowerCase().split('.').pop()
+
+      // GLB/glTF: load as 3D model, not point cloud
+      if (ext === 'glb' || ext === 'gltf') {
+        viewerRef.current?.loadGLB(file)
+        setLoading(false)
+        return
+      }
+
       const onPct = (pct: number) => {
         setProgress(pct)
         setLoadText(`${t('loading')}... ${(pct * 100) | 0}%`)
       }
-      const isPly = file.name.toLowerCase().endsWith('.ply')
+      const isPly = ext === 'ply'
       const pd = isPly
         ? await loadPLY(file, mp, onPct)
         : await loadLAS(file, mp, onPct)
@@ -525,7 +534,7 @@ function ViewerPage() {
       <div className={`absolute z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-3 right-3 top-3' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
-          <input type="file" accept=".las,.ply" className="hidden" onChange={handleInputChange} />
+          <input type="file" accept=".las,.ply,.glb,.gltf" className="hidden" onChange={handleInputChange} />
         </label>
 
         {fileName && (

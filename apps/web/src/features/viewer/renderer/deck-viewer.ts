@@ -7,6 +7,7 @@
 
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -326,6 +327,58 @@ export class DeckViewer {
 
   getPixelProjectionMatrix(): Float64Array | null {
     return this.getProjectionInfo()?.m ?? null
+  }
+
+  /** Load a GLB/glTF model from a File object */
+  loadGLB(file: File): void {
+    const url = URL.createObjectURL(file)
+    const loader = new GLTFLoader()
+    loader.load(url, (gltf) => {
+      // Remove existing point cloud
+      if (this.pointsMesh) {
+        this.scene.remove(this.pointsMesh)
+        this.pointsMesh = null
+      }
+
+      const model = gltf.scene
+
+      // Add lighting for mesh rendering
+      if (!this.scene.getObjectByName('_ambientLight')) {
+        const ambient = new THREE.AmbientLight(0xffffff, 0.5)
+        ambient.name = '_ambientLight'
+        this.scene.add(ambient)
+        const dir1 = new THREE.DirectionalLight(0xffffff, 0.8)
+        dir1.position.set(10, 20, 15)
+        dir1.name = '_dirLight1'
+        this.scene.add(dir1)
+        const dir2 = new THREE.DirectionalLight(0xffffff, 0.3)
+        dir2.position.set(-10, -10, -10)
+        dir2.name = '_dirLight2'
+        this.scene.add(dir2)
+      }
+
+      // Center and fit
+      const box = new THREE.Box3().setFromObject(model)
+      const center = box.getCenter(new THREE.Vector3())
+      const size = box.getSize(new THREE.Vector3()).length()
+
+      model.position.sub(center)
+      this.scene.add(model)
+
+      this.controls.target.set(0, 0, 0)
+      this.camera.position.set(size * 0.7, size * 0.5, size * 0.7)
+      this.camera.near = size * 0.0001
+      this.camera.far = size * 100
+      this.camera.updateProjectionMatrix()
+      this.controls.update()
+
+      this.boundRadius = size / 2
+
+      URL.revokeObjectURL(url)
+    }, undefined, (err) => {
+      URL.revokeObjectURL(url)
+      console.error('GLB load error:', err)
+    })
   }
 
   dispose(): void {
