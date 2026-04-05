@@ -6,7 +6,8 @@
  */
 
 import { COORDINATE_SYSTEM, Deck, OrbitView } from '@deck.gl/core'
-import { LineLayer, PointCloudLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { LineLayer, PointCloudLayer, ScatterplotLayer, SolidPolygonLayer } from '@deck.gl/layers'
+import type { LoftMesh, CrossSection, PrincipalAxes } from '../tools/hull-sections'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -277,6 +278,9 @@ export class DeckViewer {
   private gridLines: GridLine[] = []
   private axesLines: GridLine[] = []
   private colorVersion = 0
+  private sectionLines: GridLine[] = []
+  private meshData: { positions: Float32Array, indices: Uint32Array, axes: PrincipalAxes } | null = null
+  private showMesh = false
   private viewState: DeckViewState
   private config: ViewerConfig
   private container: HTMLElement
@@ -410,6 +414,46 @@ export class DeckViewer {
     })
   }
 
+  /** Show cross-section lines and optional lofted mesh */
+  setSections(sections: CrossSection[], axes: PrincipalAxes): void {
+    const lines: GridLine[] = []
+    for (const sec of sections) {
+      const np = sec.contour.length / 2
+      for (let i = 0; i < np; i++) {
+        const j = (i + 1) % np
+        const s: number[] = [0, 0, 0]
+        const t: number[] = [0, 0, 0]
+        s[axes.lengthAxis] = sec.position
+        s[axes.beamAxis] = sec.contour[i * 2]!
+        s[axes.depthAxis] = sec.contour[i * 2 + 1]!
+        t[axes.lengthAxis] = sec.position
+        t[axes.beamAxis] = sec.contour[j * 2]!
+        t[axes.depthAxis] = sec.contour[j * 2 + 1]!
+        lines.push({ s, t, c: [0, 200, 255] }) // cyan section lines
+      }
+    }
+    this.sectionLines = lines
+    this.updateLayers()
+  }
+
+  /** Set the lofted mesh to overlay on the point cloud */
+  setMesh(mesh: { positions: Float32Array, indices: Uint32Array } | null, axes: PrincipalAxes): void {
+    if (mesh) {
+      this.meshData = { ...mesh, axes }
+      this.showMesh = true
+    }
+    else {
+      this.meshData = null
+      this.showMesh = false
+    }
+    this.updateLayers()
+  }
+
+  toggleMesh(): void {
+    this.showMesh = !this.showMesh
+    this.updateLayers()
+  }
+
   /** Apply highlight overlay — selected points shown in orange */
   setHighlight(highlight: Uint8Array | null): void {
     this.highlightBuf = highlight
@@ -520,6 +564,19 @@ export class DeckViewer {
             getFillColor: this.colorVersion,
           },
         }),
+        // Cross-section lines (if any)
+        ...(this.sectionLines.length > 0
+          ? [new LineLayer({
+              id: 'sections',
+              coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+              data: this.sectionLines,
+              getSourcePosition: ((d: GridLine) => d.s) as any,
+              getTargetPosition: ((d: GridLine) => d.t) as any,
+              getColor: ((d: GridLine) => d.c) as any,
+              getWidth: 2,
+              widthUnits: 'pixels' as const,
+            })]
+          : []),
       ],
     })
   }

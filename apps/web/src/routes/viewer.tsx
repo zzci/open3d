@@ -7,6 +7,7 @@ import { DeckViewer } from '@/features/viewer/renderer/deck-viewer'
 import { applyOp, loadLAS } from '@/features/viewer/data/las-loader'
 import { loadPLY } from '@/features/viewer/data/ply-loader'
 import { useI18n } from '@/features/viewer/hooks/use-i18n'
+import { extractCrossSections, findPrincipalAxes, loftSections } from '@/features/viewer/tools/hull-sections'
 import { saveFilteredLAS } from '@/features/viewer/data/las-saver'
 
 export const Route = createFileRoute('/viewer')({
@@ -424,6 +425,34 @@ function ViewerPage() {
     }
   }, [data, fileName, showToast, t])
 
+  // Reconstruct — extract cross-sections and generate hull mesh
+  const [showSections, setShowSections] = useState(false)
+  const handleReconstruct = useCallback(() => {
+    if (!data) return
+    const viewer = viewerRef.current
+    if (!viewer) return
+
+    if (showSections) {
+      // Toggle off
+      viewer.setSections([], { center: [0, 0, 0], lengthAxis: 0, beamAxis: 1, depthAxis: 2, extents: [0, 0, 0] })
+      viewer.setMesh(null, { center: [0, 0, 0], lengthAxis: 0, beamAxis: 1, depthAxis: 2, extents: [0, 0, 0] })
+      setShowSections(false)
+      return
+    }
+
+    const axes = findPrincipalAxes(data.positions, data.count)
+    const sections = extractCrossSections(data.positions, data.count, axes, 20)
+    viewer.setSections(sections, axes)
+
+    const mesh = loftSections(sections, axes, 64)
+    if (mesh.vertexCount > 0) {
+      viewer.setMesh(mesh, axes)
+    }
+
+    setShowSections(true)
+    showToast(`${sections.length} sections, ${mesh.triangleCount} triangles`, 'success')
+  }, [data, showSections, showToast])
+
   // Auto color for grayscale
   useEffect(() => {
     if (data?.isGrayscale && colorMode === 'rgb') setColorMode('intensity')
@@ -579,6 +608,10 @@ function ViewerPage() {
             {editCount > 0 && <span className="text-[#ffcc44]">{editCount} {t('edits')}</span>}
             <button className="rounded bg-[#21262d] px-2 py-0.5 disabled:opacity-40" disabled={editCount === 0} onClick={handleUndo}>{t('undo')}</button>
             <button className="rounded bg-[#58a6ff] px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>{t('save')}</button>
+            <div className="h-4 w-px bg-[#30363d]" />
+            <button className={`rounded px-2 py-0.5 ${showSections ? 'bg-[#d2a8ff] text-white' : 'bg-[#21262d]'}`} disabled={!data} onClick={handleReconstruct}>
+              {showSections ? 'Hide 3D' : 'Reconstruct'}
+            </button>
           </>
         )}
         <div className="h-4 w-px bg-[#30363d]" />
