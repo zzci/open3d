@@ -38,16 +38,18 @@ type InteractionMode = 'navigate' | 'select' | 'eraser'
 interface SelectionInfo { bitmap: Uint8Array, selectedCount: number, m: Float64Array, rect: [number, number, number, number] }
 
 /**
- * Fast inline projection: pixelProjectionMatrix × point → pixel coords.
- * Returns screen x,y or null if behind camera. Zero allocations per call.
+ * Fast inline projection: viewProjectionMatrix × point → screen pixel coords.
+ * Three.js MVP outputs NDC [-1,1], we convert to pixel coords.
  */
-function projectToScreen(m: Float64Array, px: number, py: number, pz: number): { sx: number, sy: number } | null {
+function projectToScreen(m: Float64Array, vpW: number, vpH: number, px: number, py: number, pz: number): { sx: number, sy: number } | null {
   const cw = m[3]! * px + m[7]! * py + m[11]! * pz + m[15]!
   if (cw <= 0) return null
   const invW = 1 / cw
+  const ndcX = (m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) * invW
+  const ndcY = (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) * invW
   return {
-    sx: (m[0]! * px + m[4]! * py + m[8]! * pz + m[12]!) * invW,
-    sy: (m[1]! * px + m[5]! * py + m[9]! * pz + m[13]!) * invW,
+    sx: (ndcX * 0.5 + 0.5) * vpW,
+    sy: (0.5 - ndcY * 0.5) * vpH,
   }
 }
 
@@ -198,11 +200,12 @@ function ViewerPage() {
     if (R - L < 5 || B - T < 5) return
     const pm = viewer.getPixelProjectionMatrix()
     if (!pm) return
+    const { width: vpW, height: vpH } = viewer.getViewportSize()
     const pos = data.positions, n = data.count
     const hl = new Uint8Array(n)
     let found = 0
     for (let i = 0; i < n; i++) {
-      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
+      const p = projectToScreen(pm, vpW, vpH, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
       if (p && p.sx >= L && p.sx <= R && p.sy >= T && p.sy <= B) { hl[i] = 1; found++ }
     }
     if (!found) return
@@ -289,13 +292,15 @@ function ViewerPage() {
     if (!data || !viewer) return
     const pm = viewer.getPixelProjectionMatrix()
     if (!pm) return
+    const { width: vpW, height: vpH } = viewer.getViewportSize()
+    if (!pm) return
 
     const r2 = eraserSize * eraserSize
     const pos = data.positions, n = data.count
     let removed = 0
     const bitmap = new Uint8Array(n)
     for (let i = 0; i < n; i++) {
-      const p = projectToScreen(pm, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
+      const p = projectToScreen(pm, vpW, vpH, pos[i * 3]!, pos[i * 3 + 1]!, pos[i * 3 + 2]!)
       if (p) {
         const dx = p.sx - cx, dy = p.sy - cy
         if (dx * dx + dy * dy <= r2) { bitmap[i] = 1; removed++ }

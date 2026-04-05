@@ -1,52 +1,29 @@
 /**
- * deck.gl based point cloud viewer.
+ * Three.js point cloud viewer — based on proven aaa/templates/index.html approach.
  *
- * Replaces Three.js pipeline with deck.gl PointCloudLayer.
- * No custom shaders, no FBO management, no GLSL version issues.
+ * Simple PointsMaterial with vertexColors + sizeAttenuation.
+ * No custom shaders, no FBO, no GLSL version issues.
  */
 
-import { COORDINATE_SYSTEM, Deck, OrbitView } from '@deck.gl/core'
-import { LineLayer, PointCloudLayer, ScatterplotLayer, SolidPolygonLayer } from '@deck.gl/layers'
-import type { LoftMesh, CrossSection, PrincipalAxes } from '../tools/hull-sections'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface PointCloudData {
-  positions: Float32Array // xyz, length = count * 3
-  colors: Uint8Array // rgb 0-255, length = count * 3
-  intensity: Uint8Array // 0-255, length = count
+  positions: Float32Array
+  colors: Uint8Array
+  intensity: Uint8Array
   count: number
   bounds: { xn: number, xx: number, yn: number, yx: number, zn: number, zx: number }
   avgSpacing: number
   isGrayscale: boolean
 }
 
-export interface ViewerConfig {
-  pointSizeMultiplier: number
-  colorMode: string
-  onViewStateChange?: (vs: DeckViewState) => void
-}
-
-export interface DeckViewState {
-  target: [number, number, number]
-  rotationX: number
-  rotationOrbit: number
-  zoom: number
-  minZoom: number
-  maxZoom: number
-}
-
-export interface SelectionInfo {
-  matrix: number[]
-  rect: [number, number, number, number]
-  vpWidth: number
-  vpHeight: number
-}
-
 // ---------------------------------------------------------------------------
-// Auto-contrast for intensity display
+// Auto-contrast for intensity
 // ---------------------------------------------------------------------------
 
 function autoContrast(vals: Uint8Array, n: number): [number, number] {
@@ -56,442 +33,309 @@ function autoContrast(vals: Uint8Array, n: number): [number, number] {
   let lo = 0
   let hi = 255
   const lo2 = n * 0.02
-  for (let i = 0; i < 256; i++) {
-    cum += hist[i]!
-    if (cum >= lo2) {
-      lo = i
-      break
-    }
-  }
+  for (let i = 0; i < 256; i++) { cum += hist[i]!; if (cum >= lo2) { lo = i; break } }
   cum = 0
-  for (let i = 255; i >= 0; i--) {
-    cum += hist[i]!
-    if (cum >= n * 0.02) {
-      hi = i
-      break
-    }
-  }
+  for (let i = 255; i >= 0; i--) { cum += hist[i]!; if (cum >= n * 0.02) { hi = i; break } }
   return [lo, Math.max(lo + 1, hi)]
 }
 
 function hsl2rgb(h: number, s: number, l: number): [number, number, number] {
-  if (!s)
-    return [l, l, l]
+  if (!s) return [l, l, l]
   const q = l < 0.5 ? l * (1 + s) : l + s - l * s
   const p = 2 * l - q
   const f = (t: number) => {
-    if (t < 0)
-      t++
-    if (t > 1)
-      t--
+    if (t < 0) t++
+    if (t > 1) t--
     return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p
   }
   return [f(h + 1 / 3), f(h), f(h - 1 / 3)]
 }
 
 // ---------------------------------------------------------------------------
-// Color computation — writes into pre-allocated buffer
+// Color computation — writes Float32Array (0-1 range) for Three.js
 // ---------------------------------------------------------------------------
 
-export function computeColors(data: PointCloudData, mode: string, out: Uint8Array): void {
+export function computeColors(data: PointCloudData, mode: string, out: Float32Array): void {
   const { positions: pos, colors: rgb, intensity: int, count: n, isGrayscale } = data
 
   if (mode === 'rgb' && !isGrayscale) {
-    out.set(rgb.subarray(0, n * 3))
+    for (let i = 0; i < n * 3; i++) out[i] = rgb[i]! / 255
     return
   }
 
   if (mode === 'rgb' || mode === 'intensity') {
-    // Match aaa/ approach: 2-98 percentile stretch, linear mapping, full 0-255 range
     const [lo, hi] = autoContrast(int, n)
     const r = hi - lo || 1
     for (let i = 0; i < n; i++) {
-      const v = Math.min(255, Math.max(0, ((int[i]! - lo) / r) * 255)) | 0
-      out[i * 3] = v
-      out[i * 3 + 1] = v
-      out[i * 3 + 2] = v
+      const v = Math.min(1, Math.max(0, (int[i]! - lo) / r))
+      out[i * 3] = v; out[i * 3 + 1] = v; out[i * 3 + 2] = v
     }
     return
   }
 
   if (mode === 'height') {
-    let zMin = 1e30
-    let zMax = -1e30
-    for (let i = 0; i < n; i++) {
-      const z = pos[i * 3 + 2]!
-      if (z < zMin)
-        zMin = z
-      if (z > zMax)
-        zMax = z
-    }
+    let zMin = 1e30, zMax = -1e30
+    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
     const r = zMax - zMin || 1
     for (let i = 0; i < n; i++) {
       const t = (pos[i * 3 + 2]! - zMin) / r
-      out[i * 3] = (Math.min(1, Math.max(0, 1.5 - Math.abs(t - 0.75) * 4)) * 255) | 0
-      out[i * 3 + 1] = (Math.min(1, Math.max(0, 1.5 - Math.abs(t - 0.5) * 4)) * 255) | 0
-      out[i * 3 + 2] = (Math.min(1, Math.max(0, 1.5 - Math.abs(t - 0.25) * 4)) * 255) | 0
+      out[i * 3] = Math.min(1, Math.max(0, t * 3 - 1))
+      out[i * 3 + 1] = Math.min(1, Math.max(0, t < 0.5 ? t * 2 : 2 - t * 2))
+      out[i * 3 + 2] = Math.min(1, Math.max(0, 1 - t * 3))
     }
     return
   }
 
   if (mode === 'heightIntensity') {
-    let zMin = 1e30
-    let zMax = -1e30
-    for (let i = 0; i < n; i++) {
-      const z = pos[i * 3 + 2]!
-      if (z < zMin)
-        zMin = z
-      if (z > zMax)
-        zMax = z
-    }
+    let zMin = 1e30, zMax = -1e30
+    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
     const zR = zMax - zMin || 1
     const [iLo, iHi] = autoContrast(int, n)
     const iR = iHi - iLo
-    const lutR = new Uint8Array(256)
-    const lutG = new Uint8Array(256)
-    const lutB = new Uint8Array(256)
+    const lutR = new Float32Array(256), lutG = new Float32Array(256), lutB = new Float32Array(256)
     for (let h = 0; h < 256; h++) {
       const [cr, cg, cb] = hsl2rgb(h / 255 * 0.7, 0.85, 0.55)
-      lutR[h] = (cr * 255) | 0
-      lutG[h] = (cg * 255) | 0
-      lutB[h] = (cb * 255) | 0
+      lutR[h] = cr; lutG[h] = cg; lutB[h] = cb
     }
     for (let i = 0; i < n; i++) {
       const hIdx = Math.min(255, Math.max(0, ((pos[i * 3 + 2]! - zMin) / zR * 255) | 0))
       const bright = 0.4 + 0.6 * Math.min(1, Math.max(0, (int[i]! - iLo) / iR))
-      out[i * 3] = (lutR[hIdx]! * bright) | 0
-      out[i * 3 + 1] = (lutG[hIdx]! * bright) | 0
-      out[i * 3 + 2] = (lutB[hIdx]! * bright) | 0
-    }
-    return
-  }
-
-  if (mode === 'edl') {
-    // Warm/cool tone: bright warm highlights, cool blue shadows
-    const [iLo, iHi] = autoContrast(int, n)
-    const iR = iHi - iLo
-    for (let i = 0; i < n; i++) {
-      const t = Math.min(1, Math.max(0, (int[i]! - iLo) / iR))
-      out[i * 3] = ((0.3 + t * 0.7) * 255) | 0
-      out[i * 3 + 1] = ((0.3 + t * 0.65) * 255) | 0
-      out[i * 3 + 2] = ((0.4 + (1 - t) * 0.2 + t * 0.4) * 255) | 0
+      out[i * 3] = lutR[hIdx]! * bright; out[i * 3 + 1] = lutG[hIdx]! * bright; out[i * 3 + 2] = lutB[hIdx]! * bright
     }
     return
   }
 
   if (mode === 'shading') {
-    // Height cool-to-warm gradient + pseudo-diffuse lighting (like aaa/ _generate_shading)
-    let zMin = 1e30
-    let zMax = -1e30
-    for (let i = 0; i < n; i++) {
-      const z = pos[i * 3 + 2]!
-      if (z < zMin) zMin = z
-      if (z > zMax) zMax = z
-    }
+    let zMin = 1e30, zMax = -1e30
+    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
     const zR = zMax - zMin || 1
-    // Light direction (normalized)
-    const lx = 0.3, ly = 0.5, lz = 0.8
-    const lLen = Math.sqrt(lx * lx + ly * ly + lz * lz)
-    const nlx = lx / lLen, nly = ly / lLen, nlz = lz / lLen
     for (let i = 0; i < n; i++) {
-      const zNorm = Math.min(1, Math.max(0, (pos[i * 3 + 2]! - zMin) / zR))
-      // Cool-to-warm: blue(low) → cyan → white → yellow → red(high)
-      const cr = Math.min(1, Math.max(0, zNorm * 2)) * 0.6 + 0.3
-      const cg = Math.min(1, Math.max(0, 1 - Math.abs(zNorm - 0.5) * 2)) * 0.5 + 0.3
-      const cb = Math.min(1, Math.max(0, (1 - zNorm) * 2)) * 0.6 + 0.3
-      // Pseudo-diffuse from position gradient (approximates normal shading without real normals)
-      // Use intensity as a proxy for surface orientation
+      const zN = Math.min(1, Math.max(0, (pos[i * 3 + 2]! - zMin) / zR))
+      const cr = Math.min(1, Math.max(0, zN * 2)) * 0.6 + 0.3
+      const cg = Math.min(1, Math.max(0, 1 - Math.abs(zN - 0.5) * 2)) * 0.5 + 0.3
+      const cb = Math.min(1, Math.max(0, (1 - zN) * 2)) * 0.6 + 0.3
       const bright = 0.4 + 0.6 * Math.min(1, Math.max(0, int[i]! / 255))
-      out[i * 3] = (cr * bright * 255) | 0
-      out[i * 3 + 1] = (cg * bright * 255) | 0
-      out[i * 3 + 2] = (cb * bright * 255) | 0
+      out[i * 3] = cr * bright; out[i * 3 + 1] = cg * bright; out[i * 3 + 2] = cb * bright
     }
     return
   }
 
-  // white fallback
-  for (let i = 0; i < n * 3; i++) out[i] = 255
-}
-
-// ---------------------------------------------------------------------------
-// Grid + axis lines
-// ---------------------------------------------------------------------------
-
-interface GridLine {
-  s: number[]
-  t: number[]
-  c: number[]
-}
-
-function buildGrid(bounds: PointCloudData['bounds']): { lines: GridLine[], axes: GridLine[] } {
-  const { xn, xx, yn, yx, zn } = bounds
-  const lines: GridLine[] = []
-  const rangeX = xx - xn
-  const rangeY = yx - yn
-  const maxRange = Math.max(rangeX, rangeY) || 10
-  const rawStep = maxRange / 15
-  const mag = 10 ** Math.floor(Math.log10(rawStep))
-  const steps = [1, 2, 5, 10]
-  let gridStep = mag
-  for (const s of steps) {
-    if (mag * s >= rawStep) {
-      gridStep = mag * s
-      break
+  if (mode === 'edl') {
+    const [iLo, iHi] = autoContrast(int, n)
+    const iR = iHi - iLo
+    for (let i = 0; i < n; i++) {
+      const t = Math.min(1, Math.max(0, (int[i]! - iLo) / iR))
+      out[i * 3] = 0.3 + t * 0.7; out[i * 3 + 1] = 0.3 + t * 0.65; out[i * 3 + 2] = 0.4 + (1 - t) * 0.2 + t * 0.4
     }
+    return
   }
 
-  const gxn = Math.floor(xn / gridStep) * gridStep
-  const gxx = Math.ceil(xx / gridStep) * gridStep
-  const gyn = Math.floor(yn / gridStep) * gridStep
-  const gyx = Math.ceil(yx / gridStep) * gridStep
-  const gridColor = [31, 41, 55] // dark grid for dark bg
-
-  for (let x = gxn; x <= gxx; x += gridStep) {
-    const isOrigin = Math.abs(x) < gridStep * 0.01
-    lines.push({ s: [x, gyn, zn], t: [x, gyx, zn], c: isOrigin ? [100, 40, 40] : gridColor })
-  }
-  for (let y = gyn; y <= gyx; y += gridStep) {
-    const isOrigin = Math.abs(y) < gridStep * 0.01
-    lines.push({ s: [gxn, y, zn], t: [gxx, y, zn], c: isOrigin ? [40, 80, 40] : gridColor })
-  }
-
-  const axLen = maxRange * 0.15
-  const axes = [
-    { s: [0, 0, zn], t: [axLen, 0, zn], c: [220, 60, 60] },
-    { s: [0, 0, zn], t: [0, axLen, zn], c: [60, 200, 60] },
-    { s: [0, 0, zn], t: [0, 0, zn + axLen], c: [60, 100, 220] },
-  ]
-
-  return { lines, axes }
+  // white
+  for (let i = 0; i < n * 3; i++) out[i] = 1
 }
 
 // ---------------------------------------------------------------------------
-// DeckViewer class
+// ThreeViewer class — based on aaa/templates/index.html
 // ---------------------------------------------------------------------------
 
 export class DeckViewer {
-  private deck: Deck<any>
-  private data: PointCloudData | null = null
-  private colorBuf: Uint8Array | null = null
-  private normalsBuf: Float32Array | null = null
+  private renderer: THREE.WebGLRenderer
+  private scene: THREE.Scene
+  private camera: THREE.PerspectiveCamera
+  private controls: OrbitControls
+  private pointsMesh: THREE.Points | null = null
+  private colArr: Float32Array | null = null
+  private origColArr: Float32Array | null = null
   private highlightBuf: Uint8Array | null = null
-  private gridLines: GridLine[] = []
-  private axesLines: GridLine[] = []
-  private colorVersion = 0
-  private sectionLines: GridLine[] = []
-  private meshData: { positions: Float32Array, indices: Uint32Array, axes: PrincipalAxes } | null = null
-  private showMesh = false
-  private viewState: DeckViewState
-  private config: ViewerConfig
+  private data: PointCloudData | null = null
+  private boundRadius = 50
+  private animId = 0
   private container: HTMLElement
+  private colorMode = 'intensity'
+  private pointSizeMultiplier = 1.0
 
-  constructor(container: HTMLElement, config: Partial<ViewerConfig> = {}) {
+  constructor(container: HTMLElement, config: { colorMode?: string, pointSizeMultiplier?: number } = {}) {
     this.container = container
-    this.config = {
-      pointSizeMultiplier: 1.0,
-      colorMode: 'intensity',
-      ...config,
-    }
+    this.colorMode = config.colorMode ?? 'intensity'
+    this.pointSizeMultiplier = config.pointSizeMultiplier ?? 1.0
 
-    this.viewState = {
-      target: [0, 0, 0],
-      rotationX: 30,
-      rotationOrbit: -30,
-      zoom: 1,
-      minZoom: -10,
-      maxZoom: 20,
-    }
+    // Scene
+    this.scene = new THREE.Scene()
+    this.scene.background = new THREE.Color(0x808085)
 
-    this.deck = new Deck({
-      // @ts-expect-error glOptions not in DeckProps type but works at runtime
-      glOptions: { alpha: false },
-      parent: container as any,
-      views: new OrbitView({ orbitAxis: 'Z' }),
-      initialViewState: this.viewState,
-      controller: { scrollZoom: { speed: 0.05, smooth: true }, inertia: true } as any,
-      parameters: { depthTest: false, clearColor: [0.5, 0.5, 0.52, 1] } as any, // dark bg like aaa/
-      onViewStateChange: ({ viewState }: any) => {
-        this.viewState = viewState
-        this.config.onViewStateChange?.(viewState)
-        return viewState
-      },
-      layers: [],
-      style: { position: 'absolute', inset: '0' },
-    })
+    // Camera
+    const w = container.clientWidth || window.innerWidth
+    const h = container.clientHeight || window.innerHeight
+    this.camera = new THREE.PerspectiveCamera(60, w / h, 0.01, 5000)
+    this.camera.position.set(20, 15, 20)
 
-    // deck.gl creates internal overlay divs that may have opaque backgrounds
-    // Force all children of the container to be transparent
-    requestAnimationFrame(() => {
-      container.querySelectorAll('div').forEach((el) => {
-        if (el !== container && !el.querySelector('canvas')) {
-          el.style.background = 'transparent'
-        }
-      })
-    })
+    // Renderer
+    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    this.renderer.setSize(w, h)
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    container.appendChild(this.renderer.domElement)
+
+    // Controls — match aaa/ settings
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+    this.controls.enableDamping = true
+    this.controls.dampingFactor = 0.1
+    this.controls.rotateSpeed = 0.8
+    this.controls.zoomSpeed = 1.2
+    this.controls.panSpeed = 0.8
+    this.controls.screenSpacePanning = true
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+    this.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }
+
+    // Grid + Axes
+    this.scene.add(new THREE.GridHelper(200, 40, 0x444444, 0x333333))
+    this.scene.add(new THREE.AxesHelper(5))
+
+    // Resize
+    window.addEventListener('resize', this.onResize)
+
+    // Render loop
+    this.animate()
   }
 
   setData(data: PointCloudData): void {
     this.data = data
-    this.colorBuf = new Uint8Array(data.count * 3)
-    this.normalsBuf = new Float32Array(data.count * 3)
     this.highlightBuf = null
+    this.origColArr = null
 
-    const { lines, axes } = buildGrid(data.bounds)
-    this.gridLines = lines
-    this.axesLines = axes
+    // Build geometry
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3))
 
+    // Colors (Float32, 0-1 range)
+    this.colArr = new Float32Array(data.count * 3)
     this.recomputeColors()
-    this.updateLayers()
+    geometry.setAttribute('color', new THREE.BufferAttribute(this.colArr, 3))
+    geometry.computeBoundingSphere()
 
-    // Fit to viewport after deck.gl has rendered and container has real dimensions
-    const fitToView = () => {
-      const { xn, xx, yn, yx, zn, zx } = data.bounds
-      const bSize = Math.max(xx - xn, yx - yn, zx - zn) || 10
-      const vpW = this.container.clientWidth
-      const vpH = this.container.clientHeight
-      if (vpW === 0 || vpH === 0) {
-        requestAnimationFrame(fitToView)
-        return
-      }
-      this.viewState = {
-        ...this.viewState,
-        target: [0, 0, 0],
-        rotationX: 30,
-        rotationOrbit: -30,
-        zoom: Math.log2(Math.min(vpW, vpH) * 0.8 / bSize),
-      }
-      this.deck.setProps({ initialViewState: this.viewState as any })
-    }
-    requestAnimationFrame(fitToView)
+    // Material — same as aaa/
+    const material = new THREE.PointsMaterial({
+      size: 0.1 * this.pointSizeMultiplier,
+      vertexColors: true,
+      sizeAttenuation: true,
+    })
+
+    if (this.pointsMesh) this.scene.remove(this.pointsMesh)
+    this.pointsMesh = new THREE.Points(geometry, material)
+    this.scene.add(this.pointsMesh)
+
+    // Fit camera
+    const center = geometry.boundingSphere!.center
+    const radius = geometry.boundingSphere!.radius
+    this.boundRadius = radius
+
+    this.controls.target.copy(center)
+    this.camera.position.set(center.x + radius * 0.8, center.y + radius * 0.5, center.z + radius * 0.8)
+    this.camera.near = radius * 0.001
+    this.camera.far = radius * 100
+    this.camera.updateProjectionMatrix()
+    this.controls.update()
   }
 
-  /** Update point data without resetting camera — used after edit operations */
   updateData(data: PointCloudData): void {
+    // Update without resetting camera
     this.data = data
-    this.colorBuf = new Uint8Array(data.count * 3)
-    this.normalsBuf = new Float32Array(data.count * 3)
     this.highlightBuf = null
+    this.origColArr = null
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3))
+
+    this.colArr = new Float32Array(data.count * 3)
     this.recomputeColors()
-    this.colorVersion++
-    this.updateLayers()
+    geometry.setAttribute('color', new THREE.BufferAttribute(this.colArr, 3))
+
+    const material = new THREE.PointsMaterial({
+      size: 0.1 * this.pointSizeMultiplier,
+      vertexColors: true,
+      sizeAttenuation: true,
+    })
+
+    if (this.pointsMesh) this.scene.remove(this.pointsMesh)
+    this.pointsMesh = new THREE.Points(geometry, material)
+    this.scene.add(this.pointsMesh)
   }
 
   setColorMode(mode: string): void {
-    this.config.colorMode = mode
+    this.colorMode = mode
     this.recomputeColors()
-    this.colorVersion++
-    this.updateLayers()
+    this.applyHighlight()
+    this.pushColors()
   }
 
   setPointSize(multiplier: number): void {
-    this.config.pointSizeMultiplier = multiplier
-    this.updateLayers()
+    this.pointSizeMultiplier = multiplier
+    if (this.pointsMesh) {
+      ;(this.pointsMesh.material as THREE.PointsMaterial).size = 0.1 * multiplier
+    }
   }
 
   setController(enabled: boolean): void {
-    this.deck.setProps({
-      controller: enabled
-        ? { scrollZoom: { speed: 0.05, smooth: true }, inertia: true }
-        : false,
-    })
+    this.controls.enabled = enabled
   }
 
   setViewPreset(preset: string): void {
-    const presets: Record<string, [number, number]> = {
-      persp: [30, -30],
-      top: [90, 0],
-      bottom: [-90, 0],
-      front: [0, 0],
-      back: [0, 180],
-      right: [0, -90],
-      left: [0, 90],
+    const t = this.controls.target
+    const r = this.boundRadius
+    const views: Record<string, [number, number, number]> = {
+      persp: [0.8, 0.5, 0.8],
+      top: [0, 1, 0.01],
+      bottom: [0, -1, 0.01],
+      front: [0, 0.1, 1],
+      back: [0, 0.1, -1],
+      right: [1, 0.1, 0],
+      left: [-1, 0.1, 0],
     }
-    const [rx, ro] = presets[preset] ?? [30, -30]
-    this.viewState = { ...this.viewState, rotationX: rx, rotationOrbit: ro }
-    // Must set both initialViewState and viewState to force deck.gl to apply the change
-    this.deck.setProps({
-      initialViewState: { ...this.viewState, transitionDuration: 300 } as any,
-    })
+    const [dx, dy, dz] = views[preset] ?? [0.8, 0.5, 0.8]
+    this.camera.position.set(t.x + dx * r, t.y + dy * r, t.z + dz * r)
+    this.controls.update()
   }
 
-  /** Show cross-section lines and optional lofted mesh */
-  setSections(sections: CrossSection[], axes: PrincipalAxes): void {
-    const lines: GridLine[] = []
-    for (const sec of sections) {
-      const np = sec.contour.length / 2
-      for (let i = 0; i < np; i++) {
-        const j = (i + 1) % np
-        const s: number[] = [0, 0, 0]
-        const t: number[] = [0, 0, 0]
-        s[axes.lengthAxis] = sec.position
-        s[axes.beamAxis] = sec.contour[i * 2]!
-        s[axes.depthAxis] = sec.contour[i * 2 + 1]!
-        t[axes.lengthAxis] = sec.position
-        t[axes.beamAxis] = sec.contour[j * 2]!
-        t[axes.depthAxis] = sec.contour[j * 2 + 1]!
-        lines.push({ s, t, c: [0, 200, 255] }) // cyan section lines
-      }
-    }
-    this.sectionLines = lines
-    this.updateLayers()
-  }
-
-  /** Set the lofted mesh to overlay on the point cloud */
-  setMesh(mesh: { positions: Float32Array, indices: Uint32Array } | null, axes: PrincipalAxes): void {
-    if (mesh) {
-      this.meshData = { ...mesh, axes }
-      this.showMesh = true
-    }
-    else {
-      this.meshData = null
-      this.showMesh = false
-    }
-    this.updateLayers()
-  }
-
-  toggleMesh(): void {
-    this.showMesh = !this.showMesh
-    this.updateLayers()
-  }
-
-  /** Apply highlight overlay — selected points shown in orange */
   setHighlight(highlight: Uint8Array | null): void {
     this.highlightBuf = highlight
-    this.recomputeColors()
-    this.colorVersion++
-    this.updateLayers()
+    if (!highlight) {
+      // Restore original colors
+      if (this.origColArr && this.colArr) this.colArr.set(this.origColArr)
+    }
+    else {
+      this.applyHighlight()
+    }
+    this.pushColors()
   }
 
-  /** Get the current viewport for selection projection */
-  getViewport(): { project: (pos: number[]) => number[] } | null {
-    const vps = this.deck.getViewports()
-    if (!vps?.length) return null
-    return vps[0] as { project: (pos: number[]) => number[] }
-  }
-
-  /** Get viewProjectionMatrix — projects world coords to NDC [-1,1] (for saveLAS compatibility) */
-  getViewProjectionMatrix(): number[] | null {
-    const vps = this.deck.getViewports()
-    if (!vps?.length) return null
-    const vp = vps[0] as { viewProjectionMatrix: number[] }
-    return Array.from(vp.viewProjectionMatrix)
-  }
-
-  /** Get pixel projection matrix — projects world coords directly to CSS pixel coords */
-  getPixelProjectionMatrix(): Float64Array | null {
-    const vps = this.deck.getViewports()
-    if (!vps?.length) return null
-    const vp = vps[0] as { pixelProjectionMatrix: number[] }
-    if (!vp.pixelProjectionMatrix) return null
-    return new Float64Array(vp.pixelProjectionMatrix)
+  /** Get viewProjectionMatrix for selection */
+  getProjectionInfo(): { m: Float64Array } | null {
+    if (!this.pointsMesh) return null
+    this.camera.updateMatrixWorld()
+    const mvp = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse)
+    return { m: new Float64Array(mvp.elements) }
   }
 
   getViewportSize(): { width: number, height: number } {
     return { width: this.container.clientWidth, height: this.container.clientHeight }
   }
 
+  getViewProjectionMatrix(): number[] | null {
+    const info = this.getProjectionInfo()
+    return info ? Array.from(info.m) : null
+  }
+
+  getPixelProjectionMatrix(): Float64Array | null {
+    return this.getProjectionInfo()?.m ?? null
+  }
+
   dispose(): void {
-    this.deck.finalize()
+    cancelAnimationFrame(this.animId)
+    window.removeEventListener('resize', this.onResize)
+    this.controls.dispose()
+    this.renderer.dispose()
+    if (this.renderer.domElement.parentNode) {
+      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement)
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -499,85 +343,43 @@ export class DeckViewer {
   // -----------------------------------------------------------------------
 
   private recomputeColors(): void {
-    if (!this.data || !this.colorBuf)
-      return
-    computeColors(this.data, this.config.colorMode, this.colorBuf)
+    if (!this.data || !this.colArr) return
+    computeColors(this.data, this.colorMode, this.colArr)
+    this.origColArr = new Float32Array(this.colArr)
+  }
 
-    // Apply highlight overlay
-    if (this.highlightBuf) {
-      for (let i = 0; i < this.data.count; i++) {
-        if (this.highlightBuf[i]) {
-          this.colorBuf[i * 3] = 255
-          this.colorBuf[i * 3 + 1] = 100
-          this.colorBuf[i * 3 + 2] = 25
-        }
+  private applyHighlight(): void {
+    if (!this.highlightBuf || !this.colArr || !this.origColArr || !this.data) return
+    // Restore base colors first
+    this.colArr.set(this.origColArr)
+    // Overlay selected points in orange
+    for (let i = 0; i < this.data.count; i++) {
+      if (this.highlightBuf[i]) {
+        this.colArr[i * 3] = 1.0
+        this.colArr[i * 3 + 1] = 0.4
+        this.colArr[i * 3 + 2] = 0.1
       }
     }
   }
 
-  private updateLayers(): void {
-    if (!this.data || !this.colorBuf || !this.normalsBuf) {
-      this.deck.setProps({ layers: [] })
-      return
-    }
+  private pushColors(): void {
+    if (!this.pointsMesh || !this.colArr) return
+    const attr = this.pointsMesh.geometry.getAttribute('color') as THREE.BufferAttribute
+    attr.array.set(this.colArr)
+    attr.needsUpdate = true
+  }
 
-    this.deck.setProps({
-      layers: [
-        new LineLayer({
-          id: 'grid',
-          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-          data: this.gridLines,
-          getSourcePosition: ((d: GridLine) => d.s) as any,
-          getTargetPosition: ((d: GridLine) => d.t) as any,
-          getColor: ((d: GridLine) => d.c) as any,
-          getWidth: 1,
-          widthUnits: 'pixels' as const,
-        }),
-        new LineLayer({
-          id: 'axes',
-          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-          data: this.axesLines,
-          getSourcePosition: ((d: GridLine) => d.s) as any,
-          getTargetPosition: ((d: GridLine) => d.t) as any,
-          getColor: ((d: GridLine) => d.c) as any,
-          getWidth: 3,
-          widthUnits: 'pixels' as const,
-        }),
-        new ScatterplotLayer({
-          id: 'points',
-          coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-          data: {
-            length: this.data.count,
-            attributes: {
-              getPosition: { value: this.data.positions, size: 3 },
-              getFillColor: { value: this.colorBuf, size: 3 },
-            },
-          },
-          // Fixed pixel radius — does NOT scale with zoom
-          radiusUnits: 'pixels' as any,
-          getRadius: this.config.pointSizeMultiplier * 0.5,
-          radiusMinPixels: 0,
-          radiusMaxPixels: 20,
-          stroked: false,
-          antialiasing: false,
-          updateTriggers: {
-            getFillColor: this.colorVersion,
-          },
-        }),
-        // Cross-section lines (if any)
-        ...(this.sectionLines.length > 0
-          ? [new LineLayer({
-              id: 'sections',
-              coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-              data: this.sectionLines,
-              getSourcePosition: ((d: GridLine) => d.s) as any,
-              getTargetPosition: ((d: GridLine) => d.t) as any,
-              getColor: ((d: GridLine) => d.c) as any,
-              getWidth: 2,
-              widthUnits: 'pixels' as const,
-            })]
-          : []),
-      ],
-    })
+  private animate = (): void => {
+    this.animId = requestAnimationFrame(this.animate)
+    this.controls.update()
+    this.renderer.render(this.scene, this.camera)
+  }
+
+  private onResize = (): void => {
+    const w = this.container.clientWidth || window.innerWidth
+    const h = this.container.clientHeight || window.innerHeight
+    this.camera.aspect = w / h
+    this.camera.updateProjectionMatrix()
+    this.renderer.setSize(w, h)
   }
 }
