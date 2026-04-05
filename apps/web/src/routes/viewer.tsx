@@ -8,6 +8,7 @@ import { applyOp, loadLAS } from '@/features/viewer/data/las-loader'
 import { loadPLY } from '@/features/viewer/data/ply-loader'
 import { useI18n } from '@/features/viewer/hooks/use-i18n'
 import { extractCrossSections, findPrincipalAxes, loftSections } from '@/features/viewer/tools/hull-sections'
+import { detectStructure } from '@/features/viewer/tools/structure-detect'
 import { saveFilteredLAS } from '@/features/viewer/data/las-saver'
 
 export const Route = createFileRoute('/viewer')({
@@ -453,6 +454,61 @@ function ViewerPage() {
     showToast(`${sections.length} sections, ${mesh.triangleCount} triangles`, 'success')
   }, [data, showSections, showToast])
 
+  // Structure detection — separate walls/floor/ceiling from furniture
+  const [structureMode, setStructureMode] = useState<'all' | 'structure' | 'furniture'>('all')
+  const structureResultRef = useRef<{ mask: Uint8Array, planes: number, structureCount: number, furnitureCount: number } | null>(null)
+
+  const handleStructure = useCallback((mode: 'all' | 'structure' | 'furniture') => {
+    if (!data || !baseDataRef.current) return
+    const viewer = viewerRef.current
+    if (!viewer) return
+
+    if (mode === 'all') {
+      setStructureMode('all')
+      const derived = deriveData(baseDataRef.current, opsRef.current)
+      setData(derived)
+      viewer.updateData(derived)
+      structureResultRef.current = null
+      return
+    }
+
+    // Run detection if not cached
+    if (!structureResultRef.current) {
+      showToast('Detecting structure...', 'info')
+      const result = detectStructure(data.positions, data.count)
+      structureResultRef.current = {
+        mask: result.structureMask,
+        planes: result.planes.length,
+        structureCount: result.structureCount,
+        furnitureCount: result.furnitureCount,
+      }
+      showToast(`${result.planes.length} planes, ${result.structureCount.toLocaleString()} struct / ${result.furnitureCount.toLocaleString()} furniture`, 'success')
+    }
+
+    const { mask } = structureResultRef.current
+    const keepStructure = mode === 'structure'
+    let kept = 0
+    for (let i = 0; i < data.count; i++) {
+      if (keepStructure ? mask[i] : !mask[i]) kept++
+    }
+    const np = new Float32Array(kept * 3)
+    const nc = new Uint8Array(kept * 3)
+    const ni = new Uint8Array(kept)
+    let j = 0
+    for (let i = 0; i < data.count; i++) {
+      if (!(keepStructure ? !!mask[i] : !mask[i])) continue
+      np[j * 3] = data.positions[i * 3]!; np[j * 3 + 1] = data.positions[i * 3 + 1]!; np[j * 3 + 2] = data.positions[i * 3 + 2]!
+      nc[j * 3] = data.colors[i * 3]!; nc[j * 3 + 1] = data.colors[i * 3 + 1]!; nc[j * 3 + 2] = data.colors[i * 3 + 2]!
+      ni[j] = data.intensity[i]!
+      j++
+    }
+    const filtered: PointCloudData = { positions: np, colors: nc, intensity: ni, count: kept, bounds: data.bounds, avgSpacing: data.avgSpacing, isGrayscale: data.isGrayscale }
+    setData(filtered)
+    viewer.updateData(filtered)
+
+    setStructureMode(mode)
+  }, [data, showToast, deriveData])
+
   // Auto color for grayscale
   useEffect(() => {
     if (data?.isGrayscale && colorMode === 'rgb') setColorMode('intensity')
@@ -612,6 +668,10 @@ function ViewerPage() {
             <button className={`rounded px-2 py-0.5 ${showSections ? 'bg-[#d2a8ff] text-white' : 'bg-[#21262d]'}`} disabled={!data} onClick={handleReconstruct}>
               {showSections ? 'Hide 3D' : 'Reconstruct'}
             </button>
+            <div className="h-4 w-px bg-[#30363d]" />
+            <button className={`rounded px-2 py-0.5 ${structureMode === 'all' ? 'bg-[#30363d]' : 'hover:bg-[#30363d]'}`} onClick={() => handleStructure('all')}>All</button>
+            <button className={`rounded px-2 py-0.5 ${structureMode === 'structure' ? 'bg-[#3fb950] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => handleStructure('structure')}>Structure</button>
+            <button className={`rounded px-2 py-0.5 ${structureMode === 'furniture' ? 'bg-[#f85149] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => handleStructure('furniture')}>Furniture</button>
           </>
         )}
         <div className="h-4 w-px bg-[#30363d]" />
