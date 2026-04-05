@@ -66,8 +66,11 @@ export async function saveFilteredLAS(
     for (let i = iStart; i < iEnd; i++) {
       const lo = (i - iStart) * recLen
       const px = rI32(buf, lo) * xs + xo - cx
-      const py = rI32(buf, lo + 4) * ys + yo - cy
-      const pz = rI32(buf, lo + 8) * zs + zo - cz
+      const py_raw = rI32(buf, lo + 4) * ys + yo - cy
+      const pz_raw = rI32(buf, lo + 8) * zs + zo - cz
+      // Swap Y/Z to match Three.js Y-up convention used in viewer
+      const py = pz_raw
+      const pz = -py_raw
       const key = `${(px * 1000) | 0},${(py * 1000) | 0},${(pz * 1000) | 0}`
       if (!kept.has(key)) {
         deleted[i] = 1

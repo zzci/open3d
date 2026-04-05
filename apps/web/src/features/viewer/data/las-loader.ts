@@ -100,7 +100,7 @@ export async function loadLAS(
       if (lo < 0 || lo + recLen > buf.length)
         break
       const j = total
-      positions[j * 3] = rI32(buf, lo) * xs + xo - cx; positions[j * 3 + 1] = rI32(buf, lo + 4) * ys + yo - cy; positions[j * 3 + 2] = rI32(buf, lo + 8) * zs + zo - cz
+      positions[j * 3] = rI32(buf, lo) * xs + xo - cx; positions[j * 3 + 1] = rI32(buf, lo + 8) * zs + zo - cz; positions[j * 3 + 2] = -(rI32(buf, lo + 4) * ys + yo - cy)
       // Intensity: uint16 LE at offset 12, normalize to 0-255
       const rawInt = rU16(buf, lo + 12)
       intensity[j] = rawInt > 255 ? (rawInt >> 8) : rawInt

@@ -143,8 +143,8 @@ export async function loadPLY(
       if (vals.length < properties.length) continue
 
       positions[total * 3] = Number(vals[xIdx]) - cx
-      positions[total * 3 + 1] = Number(vals[yIdx]) - cy
-      positions[total * 3 + 2] = Number(vals[zIdx]) - cz
+      positions[total * 3 + 1] = Number(vals[zIdx]) - cz  // Z→Y (Three.js Y-up)
+      positions[total * 3 + 2] = -(Number(vals[yIdx]) - cy) // -Y→Z
 
       if (hasRGB) {
         const r = Number(vals[rIdx]), g = Number(vals[gIdx]), b = Number(vals[bIdx])
@@ -196,8 +196,8 @@ export async function loadPLY(
       const base = dataStart + nextIdx * vertexByteSize
 
       positions[total * 3] = readValue(view, base + propOffsets[xIdx]!, properties[xIdx]!.type) - cx
-      positions[total * 3 + 1] = readValue(view, base + propOffsets[yIdx]!, properties[yIdx]!.type) - cy
-      positions[total * 3 + 2] = readValue(view, base + propOffsets[zIdx]!, properties[zIdx]!.type) - cz
+      positions[total * 3 + 1] = readValue(view, base + propOffsets[zIdx]!, properties[zIdx]!.type) - cz  // Z→Y
+      positions[total * 3 + 2] = -(readValue(view, base + propOffsets[yIdx]!, properties[yIdx]!.type) - cy) // -Y→Z
 
       if (hasRGB) {
         let r = readValue(view, base + propOffsets[rIdx]!, properties[rIdx]!.type)
