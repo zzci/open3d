@@ -1,0 +1,19 @@
+{
+  "name": "open3d",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "bun run --filter @repo/web dev",
+    "build": "bun run --filter @repo/web build",
+    "lint": "bun run --filter @repo/web lint",
+    "typecheck": "bun run --filter @repo/web typecheck",
+    "test": "bun run --filter @repo/web test"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^8.0.0",
+    "@eslint-react/eslint-plugin": "^3.0.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "typescript": "^6.0.2"
+  }
+}

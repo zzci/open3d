@@ -1,0 +1,47 @@
+# Point cloud data files
+*.las
+*.laz
+*.ply
+*.pcd
+*.xyz
+*.pts
+*.e57
+*.copc
+
+# Node / Bun
+node_modules/
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+
+# Generated
+*.gen.ts
+.tanstack/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+__MACOSX/
+
+# Archives
+*.zip
+
+# Output
+output/
+results/
+exports/
