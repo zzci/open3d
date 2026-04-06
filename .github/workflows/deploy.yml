@@ -3,6 +3,11 @@ name: Deploy to Cloudflare Pages
 on:
   workflow_dispatch:
 
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  PROJECT_NAME: 3d-ds-cc
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -20,8 +25,14 @@ jobs:
 
       - run: bun run build
 
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/web/dist --project-name=3d-ds-cc
+      - name: Ensure Pages project exists
+        run: |
+          if ! npx wrangler pages project list 2>/dev/null | grep -q "^$PROJECT_NAME$"; then
+            echo "Project not found, creating..."
+            npx wrangler pages project create "$PROJECT_NAME" --production-branch=zzci/open3d
+          else
+            echo "Project already exists"
+          fi
+
+      - name: Deploy
+        run: npx wrangler pages deploy apps/web/dist --project-name="$PROJECT_NAME" --commit-dirty=true
