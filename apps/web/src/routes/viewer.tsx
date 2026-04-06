@@ -79,6 +79,7 @@ function ViewerPage() {
   const [totalPoints, setTotalPoints] = useState(0)
   const [editCount, setEditCount] = useState(0)
   const { t, toggle: toggleLang, lang } = useI18n()
+  const [isGlb, setIsGlb] = useState(false)
   const [eraserSize, setEraserSize] = useState(20) // pixel radius
   const [eraserPos, setEraserPos] = useState<{ x: number, y: number } | null>(null)
   const erasingRef = useRef(false)
@@ -146,6 +147,10 @@ function ViewerPage() {
   }, [deriveData])
 
   const handleFile = useCallback(async (file: File) => {
+    const ext = file.name.toLowerCase().split('.').pop()
+    const glb = ext === 'glb' || ext === 'gltf'
+    setIsGlb(glb)
+    if (glb) setMode('navigate')
     fileRef.current = file
     opsRef.current = []
     setEditCount(0)
@@ -530,24 +535,24 @@ function ViewerPage() {
         </div>
       )}
 
-      {/* Toolbar — always visible, centered when no file */}
-      <div className={`absolute z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm ${fileName ? 'left-3 right-3 top-3' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}>
+      {/* Toolbar — always visible at top */}
+      <div className="absolute left-3 right-3 top-3 z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm">
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
           <input type="file" accept=".las,.ply,.glb,.gltf" className="hidden" onChange={handleInputChange} />
         </label>
 
-        {fileName && (
+        <div className="h-4 w-px bg-[#30363d]" />
+
+        {/* View presets */}
+        {VIEWS.map(v => (
+          <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-[#58a6ff] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setViewPreset(v)}>
+            {t(VIEW_KEYS[v])}
+          </button>
+        ))}
+
+        {!isGlb && (
           <>
-            <div className="h-4 w-px bg-[#30363d]" />
-
-            {/* View presets */}
-            {VIEWS.map(v => (
-              <button key={v} className={`rounded px-1.5 py-0.5 ${viewPreset === v ? 'bg-[#58a6ff] text-white' : 'hover:bg-[#30363d]'}`} onClick={() => setViewPreset(v)}>
-                {t(VIEW_KEYS[v])}
-              </button>
-            ))}
-
             <div className="h-4 w-px bg-[#30363d]" />
 
             {/* Nav/Select/Eraser mode */}
@@ -597,12 +602,13 @@ function ViewerPage() {
             <button className="rounded bg-[#58a6ff] px-2 py-0.5 text-white disabled:opacity-40" disabled={!fileName || editCount === 0 || loading} onClick={handleSave}>{t('save')}</button>
           </>
         )}
+
         <div className="h-4 w-px bg-[#30363d]" />
         <button className="rounded bg-[#21262d] px-2 py-0.5 hover:bg-[#30363d]" onClick={toggleLang}>{t('lang')}</button>
       </div>
 
       {/* Status bar */}
-      {fileName && (
+      {fileName && !isGlb && (
         <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-3 rounded-lg bg-[#161b22]/90 px-4 py-1.5 text-xs text-[#8b949e] shadow-sm backdrop-blur-sm">
           <span>{fileName}</span>
           <span>{t('total')}: {totalPoints.toLocaleString()}</span>

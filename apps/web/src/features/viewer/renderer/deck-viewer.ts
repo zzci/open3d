@@ -75,11 +75,11 @@ export function computeColors(data: PointCloudData, mode: string, out: Float32Ar
   }
 
   if (mode === 'height') {
-    let zMin = 1e30, zMax = -1e30
-    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
-    const r = zMax - zMin || 1
+    let yMin = 1e30, yMax = -1e30
+    for (let i = 0; i < n; i++) { const y = pos[i * 3 + 1]!; if (y < yMin) yMin = y; if (y > yMax) yMax = y }
+    const r = yMax - yMin || 1
     for (let i = 0; i < n; i++) {
-      const t = (pos[i * 3 + 2]! - zMin) / r
+      const t = (pos[i * 3 + 1]! - yMin) / r
       out[i * 3] = Math.min(1, Math.max(0, t * 3 - 1))
       out[i * 3 + 1] = Math.min(1, Math.max(0, t < 0.5 ? t * 2 : 2 - t * 2))
       out[i * 3 + 2] = Math.min(1, Math.max(0, 1 - t * 3))
@@ -88,9 +88,9 @@ export function computeColors(data: PointCloudData, mode: string, out: Float32Ar
   }
 
   if (mode === 'heightIntensity') {
-    let zMin = 1e30, zMax = -1e30
-    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
-    const zR = zMax - zMin || 1
+    let yMin = 1e30, yMax = -1e30
+    for (let i = 0; i < n; i++) { const y = pos[i * 3 + 1]!; if (y < yMin) yMin = y; if (y > yMax) yMax = y }
+    const yR = yMax - yMin || 1
     const [iLo, iHi] = autoContrast(int, n)
     const iR = iHi - iLo
     const lutR = new Float32Array(256), lutG = new Float32Array(256), lutB = new Float32Array(256)
@@ -99,7 +99,7 @@ export function computeColors(data: PointCloudData, mode: string, out: Float32Ar
       lutR[h] = cr; lutG[h] = cg; lutB[h] = cb
     }
     for (let i = 0; i < n; i++) {
-      const hIdx = Math.min(255, Math.max(0, ((pos[i * 3 + 2]! - zMin) / zR * 255) | 0))
+      const hIdx = Math.min(255, Math.max(0, ((pos[i * 3 + 1]! - yMin) / yR * 255) | 0))
       const bright = 0.4 + 0.6 * Math.min(1, Math.max(0, (int[i]! - iLo) / iR))
       out[i * 3] = lutR[hIdx]! * bright; out[i * 3 + 1] = lutG[hIdx]! * bright; out[i * 3 + 2] = lutB[hIdx]! * bright
     }
@@ -107,14 +107,14 @@ export function computeColors(data: PointCloudData, mode: string, out: Float32Ar
   }
 
   if (mode === 'shading') {
-    let zMin = 1e30, zMax = -1e30
-    for (let i = 0; i < n; i++) { const z = pos[i * 3 + 2]!; if (z < zMin) zMin = z; if (z > zMax) zMax = z }
-    const zR = zMax - zMin || 1
+    let yMin = 1e30, yMax = -1e30
+    for (let i = 0; i < n; i++) { const y = pos[i * 3 + 1]!; if (y < yMin) yMin = y; if (y > yMax) yMax = y }
+    const yR = yMax - yMin || 1
     for (let i = 0; i < n; i++) {
-      const zN = Math.min(1, Math.max(0, (pos[i * 3 + 2]! - zMin) / zR))
-      const cr = Math.min(1, Math.max(0, zN * 2)) * 0.6 + 0.3
-      const cg = Math.min(1, Math.max(0, 1 - Math.abs(zN - 0.5) * 2)) * 0.5 + 0.3
-      const cb = Math.min(1, Math.max(0, (1 - zN) * 2)) * 0.6 + 0.3
+      const yN = Math.min(1, Math.max(0, (pos[i * 3 + 1]! - yMin) / yR))
+      const cr = Math.min(1, Math.max(0, yN * 2)) * 0.6 + 0.3
+      const cg = Math.min(1, Math.max(0, 1 - Math.abs(yN - 0.5) * 2)) * 0.5 + 0.3
+      const cb = Math.min(1, Math.max(0, (1 - yN) * 2)) * 0.6 + 0.3
       const bright = 0.4 + 0.6 * Math.min(1, Math.max(0, int[i]! / 255))
       out[i * 3] = cr * bright; out[i * 3 + 1] = cg * bright; out[i * 3 + 2] = cb * bright
     }
