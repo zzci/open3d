@@ -27,11 +27,11 @@ jobs:
 
       - name: Ensure Pages project exists
         run: |
-          if ! npx wrangler pages project list 2>/dev/null | grep -q "^$PROJECT_NAME$"; then
+          if npx wrangler pages project get "$PROJECT_NAME" >/dev/null 2>&1; then
+            echo "Project already exists"
+          else
             echo "Project not found, creating..."
             npx wrangler pages project create "$PROJECT_NAME" --production-branch=zzci/open3d
-          else
-            echo "Project already exists"
           fi
 
       - name: Deploy
