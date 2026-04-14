@@ -56,3 +56,4 @@ Each task is a single line linking to its detail file. All detailed information 
 - [x] [**FEAT-021 High-DPI rendering and MSAA**](FEAT-021.md) `P2`
 - [x] [**FEAT-022 Screen-space ambient occlusion (SSAO)**](FEAT-022.md) `P2`
 - [x] [**FEAT-023 Rendering mode system (Points/Shaded/Smooth/X-Ray)**](FEAT-023.md) `P1`
+- [-] [**FEAT-024 Add STP/STEP CAD file viewer support**](FEAT-024.md) `P2`

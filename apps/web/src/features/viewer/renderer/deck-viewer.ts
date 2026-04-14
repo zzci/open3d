@@ -381,6 +381,123 @@ export class DeckViewer {
     })
   }
 
+  async loadSTEP(file: File): Promise<void> {
+    const buffer = await file.arrayBuffer()
+    const fileBuffer = new Uint8Array(buffer)
+
+    const occtimportjs = await import('occt-import-js')
+    const occt = await (occtimportjs.default ?? occtimportjs)({
+      locateFile: (name: string) => {
+        if (name.endsWith('.wasm')) return '/occt-import-js.wasm'
+        return name
+      },
+    })
+
+    const result = occt.ReadStepFile(fileBuffer, {
+      linearDeflection: 0.1,
+      angularDeflection: 0.5,
+    })
+
+    // Remove existing point cloud
+    if (this.pointsMesh) {
+      this.scene.remove(this.pointsMesh)
+      this.pointsMesh = null
+    }
+
+    // Build Three.js group from STEP meshes
+    const group = new THREE.Group()
+    group.name = '_stepModel'
+
+    for (const mesh of result.meshes) {
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(mesh.attributes.position.array, 3))
+
+      if (mesh.attributes.normal) {
+        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(mesh.attributes.normal.array, 3))
+      }
+
+      geometry.setIndex(new THREE.BufferAttribute(mesh.index.array, 1))
+
+      // Per-face or per-mesh color
+      let material: THREE.MeshStandardMaterial
+      if (mesh.color) {
+        const c = mesh.color
+        material = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(c[0] / 255, c[1] / 255, c[2] / 255),
+          metalness: 0.1,
+          roughness: 0.6,
+          side: THREE.DoubleSide,
+        })
+      }
+      else {
+        material = new THREE.MeshStandardMaterial({
+          color: 0xb0b0b0,
+          metalness: 0.1,
+          roughness: 0.6,
+          side: THREE.DoubleSide,
+        })
+      }
+
+      // Apply face-level colors if available
+      if (mesh.brep_faces && mesh.brep_faces.length > 0) {
+        const colors = new Float32Array(mesh.attributes.position.array.length)
+        for (const face of mesh.brep_faces) {
+          const fc = face.color ?? mesh.color
+          const r = fc ? fc[0] / 255 : 0.7
+          const g = fc ? fc[1] / 255 : 0.7
+          const b = fc ? fc[2] / 255 : 0.7
+
+          for (let t = face.first; t < face.last; t++) {
+            const i0 = mesh.index.array[t * 3]!
+            const i1 = mesh.index.array[t * 3 + 1]!
+            const i2 = mesh.index.array[t * 3 + 2]!
+            colors[i0 * 3] = r; colors[i0 * 3 + 1] = g; colors[i0 * 3 + 2] = b
+            colors[i1 * 3] = r; colors[i1 * 3 + 1] = g; colors[i1 * 3 + 2] = b
+            colors[i2 * 3] = r; colors[i2 * 3 + 1] = g; colors[i2 * 3 + 2] = b
+          }
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+        material.vertexColors = true
+      }
+
+      geometry.computeVertexNormals()
+      const threeMesh = new THREE.Mesh(geometry, material)
+      group.add(threeMesh)
+    }
+
+    // Add lighting
+    if (!this.scene.getObjectByName('_ambientLight')) {
+      const ambient = new THREE.AmbientLight(0xffffff, 0.5)
+      ambient.name = '_ambientLight'
+      this.scene.add(ambient)
+      const dir1 = new THREE.DirectionalLight(0xffffff, 0.8)
+      dir1.position.set(10, 20, 15)
+      dir1.name = '_dirLight1'
+      this.scene.add(dir1)
+      const dir2 = new THREE.DirectionalLight(0xffffff, 0.3)
+      dir2.position.set(-10, -10, -10)
+      dir2.name = '_dirLight2'
+      this.scene.add(dir2)
+    }
+
+    // Center and fit
+    const box = new THREE.Box3().setFromObject(group)
+    const center = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3()).length()
+
+    group.position.sub(center)
+    this.scene.add(group)
+
+    this.controls.target.set(0, 0, 0)
+    this.camera.position.set(size * 0.7, size * 0.5, size * 0.7)
+    this.camera.near = size * 0.0001
+    this.camera.far = size * 100
+    this.camera.updateProjectionMatrix()
+    this.controls.update()
+
+    this.boundRadius = size / 2
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.animId)
     window.removeEventListener('resize', this.onResize)

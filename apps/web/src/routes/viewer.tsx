@@ -125,6 +125,13 @@ function ViewerPage() {
         return
       }
 
+      // STP/STEP: load as CAD model via occt-import-js
+      if (ext === 'stp' || ext === 'step') {
+        await viewerRef.current?.loadSTEP(file)
+        setLoading(false)
+        return
+      }
+
       const onPct = (pct: number) => {
         setProgress(pct)
         setLoadText(`${t('loading')}... ${(pct * 100) | 0}%`)
@@ -148,7 +155,7 @@ function ViewerPage() {
 
   const handleFile = useCallback(async (file: File) => {
     const ext = file.name.toLowerCase().split('.').pop()
-    const glb = ext === 'glb' || ext === 'gltf'
+    const glb = ext === 'glb' || ext === 'gltf' || ext === 'stp' || ext === 'step'
     setIsGlb(glb)
     if (glb) setMode('navigate')
     fileRef.current = file
@@ -473,7 +480,7 @@ function ViewerPage() {
       e.preventDefault()
       e.stopPropagation()
       const f = e.dataTransfer?.files[0]
-      if (f && /\.las|.ply$/i.test(f.name)) handleFile(f)
+      if (f && /\.(las|ply|glb|gltf|stp|step)$/i.test(f.name)) handleFile(f)
     }
     window.addEventListener('dragover', prevent)
     window.addEventListener('drop', drop)
@@ -539,7 +546,7 @@ function ViewerPage() {
       <div className="absolute left-3 right-3 top-3 z-20 flex flex-nowrap items-center gap-2 whitespace-nowrap rounded-lg bg-[#161b22]/90 px-3 py-1.5 text-xs text-[#c9d1d9] shadow-sm backdrop-blur-sm">
         <label className="cursor-pointer rounded bg-[#21262d] px-2 py-1 text-[#c9d1d9] hover:bg-[#30363d]">
           Open
-          <input type="file" accept=".las,.ply,.glb,.gltf" className="hidden" onChange={handleInputChange} />
+          <input type="file" accept=".las,.ply,.glb,.gltf,.stp,.step" className="hidden" onChange={handleInputChange} />
         </label>
 
         <div className="h-4 w-px bg-[#30363d]" />

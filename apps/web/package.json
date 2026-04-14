@@ -20,6 +20,7 @@
     "copc": "^0.0.8",
     "laz-perf": "^0.0.7",
     "lucide-react": "^0.510",
+    "occt-import-js": "^0.0.23",
     "radix-ui": "^1.4.3",
     "react": "^19",
     "react-dom": "^19",
