@@ -498,6 +498,51 @@ export class DeckViewer {
     this.boundRadius = size / 2
   }
 
+  async loadSplat(file: File): Promise<void> {
+    const { SparkRenderer, SplatMesh } = await import('@sparkjsdev/spark')
+
+    // Remove existing point cloud
+    if (this.pointsMesh) {
+      this.scene.remove(this.pointsMesh)
+      this.pointsMesh = null
+    }
+
+    // Initialize SparkRenderer if not already present
+    if (!this.scene.getObjectByName('_sparkRenderer')) {
+      const spark = new SparkRenderer({ renderer: this.renderer })
+      spark.name = '_sparkRenderer'
+      this.scene.add(spark)
+    }
+
+    // Load splat from file stream
+    const stream = file.stream()
+    const splat = new SplatMesh({
+      stream,
+      streamLength: file.size,
+      fileName: file.name,
+    })
+
+    await splat.initialized
+    this.scene.add(splat)
+
+    // Center and fit camera
+    const box = splat.getBoundingBox()
+    if (box) {
+      const center = box.getCenter(new THREE.Vector3())
+      const size = box.getSize(new THREE.Vector3()).length()
+
+      splat.position.sub(center)
+      this.controls.target.set(0, 0, 0)
+      this.camera.position.set(size * 0.7, size * 0.5, size * 0.7)
+      this.camera.near = size * 0.0001
+      this.camera.far = size * 100
+      this.camera.updateProjectionMatrix()
+      this.controls.update()
+
+      this.boundRadius = size / 2
+    }
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.animId)
     window.removeEventListener('resize', this.onResize)

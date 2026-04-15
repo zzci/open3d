@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
+    "@sparkjsdev/spark": "^2.0.0",
     "@tanstack/react-query": "^5",
     "@tanstack/react-router": "^1",
     "@types/three": "^0.183.1",

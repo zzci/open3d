@@ -16,6 +16,7 @@
       "name": "@repo/web",
       "dependencies": {
         "@repo/shared": "workspace:*",
+        "@sparkjsdev/spark": "^2.0.0",
         "@tanstack/react-query": "^5",
         "@tanstack/react-router": "^1",
         "@types/three": "^0.183.1",
@@ -408,6 +409,8 @@
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.60.1", "", { "os": "win32", "cpu": "x64" }, "sha512-lWMnixq/QzxyhTV6NjQJ4SFo1J6PvOX8vUx5Wb4bBPsEb+8xZ89Bz6kOXpfXj9ak9AHTQVQzlgzBEc1SyM27xQ=="],
 
     "@sindresorhus/base62": ["@sindresorhus/base62@1.0.0", "", {}, "sha512-TeheYy0ILzBEI/CO55CP6zJCSdSWeRtGnHy8U8dWSUH4I68iqTsy7HkMktR4xakThc9jotkPQUXT4ITdbV7cHA=="],
+
+    "@sparkjsdev/spark": ["@sparkjsdev/spark@2.0.0", "", { "dependencies": { "fflate": "^0.8.2" }, "peerDependencies": { "three": "^0.180.0" } }, "sha512-W1p7NM4xXcUAVVcVus2mIFwcAC3VckyE0l4wXJuSmhcOgb6hHpqhQ/Ks9MK9ts7j23K+UwbCBwe+aTc/zgGygw=="],
 
     "@stylistic/eslint-plugin": ["@stylistic/eslint-plugin@5.10.0", "", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/types": "^8.56.0", "eslint-visitor-keys": "^4.2.1", "espree": "^10.4.0", "estraverse": "^5.3.0", "picomatch": "^4.0.3" }, "peerDependencies": { "eslint": "^9.0.0 || ^10.0.0" } }, "sha512-nPK52ZHvot8Ju/0A4ucSX1dcPV2/1clx0kLcH5wDmrE4naKso7TUC/voUyU1O9OTKTrR6MYip6LP0ogEMQ9jPQ=="],
 
